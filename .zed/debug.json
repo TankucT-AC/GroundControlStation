@@ -1,0 +1,10 @@
+[
+  {
+    "label": "Debug (GCC)",
+    "adapter": "CodeLLDB",
+    "request": "launch",
+    "program": "out/gcc-debug/game",
+    "cwd": ".",
+    "stopOnEntry": false
+  }
+]

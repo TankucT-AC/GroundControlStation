@@ -1,0 +1,18 @@
+[
+  {
+    "label": "Build Debug",
+    "command": "cmake --preset gcc-debug && cmake --build out/gcc-debug"
+  },
+  {
+    "label": "Build Release",
+    "command": "cmake --preset clang-release && cmake --build out/clang-release"
+  },
+  {
+    "label": "Build & Run Debug",
+    "command": "cmake --preset gcc-debug && cmake --build out/gcc-debug && ./out/gcc-debug/project"
+  },
+  {
+    "label": "Build & Run Release",
+    "command": "cmake --preset clang-release && cmake --build out/clang-release && ./out/clang-release/project"
+  }
+]
