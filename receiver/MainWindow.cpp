@@ -8,6 +8,7 @@
 #include <QPen>
 #include <QVBoxLayout>
 #include <cmath>
+#include <qwidget.h>
 
 static constexpr float PI = 3.14159265358979323846f;
 
@@ -88,34 +89,50 @@ void MainWindow::onTelemetryReceived(const TelemetryPacket &pkt) {
   m_timestampLabel->setText("Last: " + dt.toString("hh:mm:ss.zzz"));
 }
 
+// ========================== BaseGaudgeWidget ============================
+
+BaseGaudgeWidget::BaseGaudgeWidget(QWidget *parent) : QWidget(parent) {}
+
+void BaseGaudgeWidget::paintEvent(QPaintEvent *event) {
+  // Инициализация инструмента рисования в виджете
+  QPainter p(this);
+  p.setRenderHint(QPainter::Antialiasing);
+
+  // Выделение на физическом экране квадрата
+  int side = qMin(width(), height());
+  p.setViewport((width() - side) / 2, (height() - side) / 2, side, side);
+
+  // Связывание виртуальных координат с рисовалкой
+  p.setWindow(widgetLeft, widgetTop, widgetWidth, widgetHeight);
+
+  drawGaudge(p);
+}
+
 // ============================== AltimeterWidget ==============================
 
-AltimeterWidget::AltimeterWidget(QWidget *parent) : QWidget(parent) {}
+AltimeterWidget::AltimeterWidget(QWidget *parent) : BaseGaudgeWidget(parent) {}
 
 void AltimeterWidget::setAltitude(float alt) {
   m_altitude = alt;
   update();
 }
 
-void AltimeterWidget::paintEvent(QPaintEvent *) {
-  QPainter p(this);
-  p.setRenderHint(QPainter::Antialiasing);
-
-  int side = qMin(width(), height());
-  p.setViewport((width() - side) / 2, (height() - side) / 2, side, side);
-  p.setWindow(-100, -100, 200, 200);
-
+void AltimeterWidget::drawGaudge(QPainter &p) {
+  // Изображение подложки циферблата
   p.setPen(QPen(Qt::white, 2));
   p.setBrush(Qt::black);
-  p.drawEllipse(0, 0, 190, 190);
+  p.drawEllipse(widgetLeft, widgetTop, widgetWidth, widgetHeight);
 
+  // Изображение текста (ALT)
   p.setPen(Qt::white);
   p.setFont(QFont("monospace", 10));
   p.drawText(-30, -70, "ALT");
 
+  // Изображение шкалы циферблата
   float angle = 0.0f;
   for (int i = 0; i <= 20; ++i) {
     float altVal = i * 10.0f;
+    // Трансляция высоты в градусы со смещением на 135 градусов
     float a = -135.0f + (altVal / 200.0f) * 270.0f;
     float rad = a * PI / 180.0f;
     int rOuter = 85;
@@ -127,6 +144,7 @@ void AltimeterWidget::paintEvent(QPaintEvent *) {
     p.drawLine(x1, y1, x2, y2);
   }
 
+  // Расчет положения и изображение стрелки циферблата
   float clamped = std::clamp(m_altitude, 0.0f, 200.0f);
   float needleAngle = -135.0f + (clamped / 200.0f) * 270.0f;
   float needleRad = needleAngle * PI / 180.0f;
@@ -134,39 +152,37 @@ void AltimeterWidget::paintEvent(QPaintEvent *) {
   p.drawLine(0, 0, static_cast<int>(70 * std::cos(needleRad)),
              static_cast<int>(70 * std::sin(needleRad)));
 
+  // Изображение единицы измерения шкалы высоты
   p.setPen(Qt::white);
   p.setFont(QFont("monospace", 12, QFont::Bold));
   p.drawText(-25, 10, QString::number(static_cast<int>(m_altitude)) + "m");
 }
 
-// ============================== SpeedometerWidget
-// ==============================
+// =============== SpeedometerWidget =================
 
-SpeedometerWidget::SpeedometerWidget(QWidget *parent) : QWidget(parent) {}
+SpeedometerWidget::SpeedometerWidget(QWidget *parent)
+    : BaseGaudgeWidget(parent) {}
 
 void SpeedometerWidget::setSpeed(float speed) {
   m_speed = speed;
   update();
 }
 
-void SpeedometerWidget::paintEvent(QPaintEvent *) {
-  QPainter p(this);
-  p.setRenderHint(QPainter::Antialiasing);
-
-  int side = qMin(width(), height());
-  p.setViewport((width() - side) / 2, (height() - side) / 2, side, side);
-  p.setWindow(-100, -100, 200, 200);
-
+void SpeedometerWidget::drawGaudge(QPainter &p) {
+  // Изображение подложки циферблата
   p.setPen(QPen(Qt::white, 2));
   p.setBrush(Qt::black);
-  p.drawEllipse(0, 0, 190, 190);
+  p.drawEllipse(widgetLeft, widgetTop, widgetWidth, widgetHeight);
 
+  // Изображение текста (SPD)
   p.setPen(Qt::white);
   p.setFont(QFont("monospace", 10));
   p.drawText(-30, -70, "SPD");
 
+  // Отрисовка шкалы циферблата
   for (int i = 0; i <= 12; ++i) {
     float spdVal = i * 5.0f;
+    // Перевод скорости в градусы со смещением на -120 градусов
     float a = -120.0f + (spdVal / 60.0f) * 240.0f;
     float rad = a * PI / 180.0f;
     int rOuter = 85;
@@ -178,6 +194,7 @@ void SpeedometerWidget::paintEvent(QPaintEvent *) {
     p.drawLine(x1, y1, x2, y2);
   }
 
+  // Расчет угла и изображение стрелки спидометра
   float clamped = std::clamp(m_speed, 0.0f, 60.0f);
   float needleAngle = -120.0f + (clamped / 60.0f) * 240.0f;
   float needleRad = needleAngle * PI / 180.0f;
@@ -185,6 +202,7 @@ void SpeedometerWidget::paintEvent(QPaintEvent *) {
   p.drawLine(0, 0, static_cast<int>(70 * std::cos(needleRad)),
              static_cast<int>(70 * std::sin(needleRad)));
 
+  // Изображение текста единицы измерения скорости
   p.setPen(Qt::white);
   p.setFont(QFont("monospace", 12, QFont::Bold));
   p.drawText(-25, 10, QString::number(static_cast<int>(m_speed)) + "m/s");
@@ -192,7 +210,7 @@ void SpeedometerWidget::paintEvent(QPaintEvent *) {
 
 // ============================== AttitudeWidget ==============================
 
-AttitudeWidget::AttitudeWidget(QWidget *parent) : QWidget(parent) {}
+AttitudeWidget::AttitudeWidget(QWidget *parent) : BaseGaudgeWidget(parent) {}
 
 void AttitudeWidget::setPitchRoll(float pitch, float roll) {
   m_pitch = pitch;
@@ -200,66 +218,74 @@ void AttitudeWidget::setPitchRoll(float pitch, float roll) {
   update();
 }
 
-void AttitudeWidget::paintEvent(QPaintEvent *) {
-  QPainter p(this);
-  p.setRenderHint(QPainter::Antialiasing);
+void AttitudeWidget::drawGaudge(QPainter &p) {
+  // Включаем обрезку по рамке
+  p.setClipRect(widgetLeft + 2, widgetTop + 2, widgetWidth - 4,
+                widgetHeight - 4);
 
-  int side = qMin(width(), height());
-  p.setViewport((width() - side) / 2, (height() - side) / 2, side, side);
-  p.setWindow(-100, -100, 200, 200);
-
+  // Рисование динамичной части
   p.save();
   p.translate(0, 0);
   p.rotate(-m_roll);
 
   int pitchOffset = static_cast<int>(m_pitch * 2.0f);
 
+  // Небо
   p.setBrush(QColor(80, 130, 200));
   p.setPen(Qt::NoPen);
   QPolygon sky;
-  sky << QPoint(-100, -100) << QPoint(100, -100) << QPoint(100, pitchOffset)
-      << QPoint(-100, pitchOffset);
+  // Домножение на 2 нужно чтобы не образовывались пустоты при повороте
+  sky << QPoint(widgetLeft * 2, widgetTop * 2)
+      << QPoint(widgetRight * 2, widgetTop * 2)
+      << QPoint(widgetRight * 2, pitchOffset)
+      << QPoint(widgetLeft * 2, pitchOffset);
   p.drawPolygon(sky);
 
+  // Земля
   p.setBrush(QColor(139, 90, 43));
   QPolygon ground;
-  ground << QPoint(-100, pitchOffset) << QPoint(100, pitchOffset)
-         << QPoint(100, 100) << QPoint(-100, 100);
+  // Домножение на 2 нужно чтобы не образовывались пустоты при повороте
+  ground << QPoint(widgetLeft * 2, pitchOffset)
+         << QPoint(widgetRight * 2, pitchOffset)
+         << QPoint(widgetRight * 2, widgetBottom * 2)
+         << QPoint(widgetLeft * 2, widgetBottom * 2);
   p.drawPolygon(ground);
 
+  // Линия горизонта
   p.setPen(QPen(Qt::white, 2));
-  p.drawLine(-100, pitchOffset, 100, pitchOffset);
+  // Домножение на 2 нужно чтобы не образовывались обрывы горизонта при повороте
+  p.drawLine(widgetLeft * 2, pitchOffset, widgetRight * 2, pitchOffset);
 
   p.restore();
 
+  // Отрисовка статической части
+  p.setClipping(false);
   p.setPen(QPen(Qt::white, 2));
   p.setBrush(Qt::NoBrush);
-  p.drawRect(-98, -98, 196, 196);
 
-  p.drawLine(-20, 0, 20, 0);
-  p.drawLine(0, -10, 0, 10);
+  // Отрисовка внешней рамки
+  p.drawRect(widgetLeft + 2, widgetTop + 2, widgetWidth - 4, widgetHeight - 4);
+
+  static constexpr int crossSizeX = widgetWidth / 10;
+  static constexpr int crossSizeY = widgetHeight / 20;
+  p.drawLine(-crossSizeX, 0, crossSizeX, 0);
+  p.drawLine(0, -crossSizeY, 0, crossSizeY);
 }
 
 // ============================== CompassWidget ==============================
 
-CompassWidget::CompassWidget(QWidget *parent) : QWidget(parent) {}
+CompassWidget::CompassWidget(QWidget *parent) : BaseGaudgeWidget(parent) {}
 
 void CompassWidget::setYaw(float yaw) {
   m_yaw = yaw;
   update();
 }
 
-void CompassWidget::paintEvent(QPaintEvent *) {
-  QPainter p(this);
-  p.setRenderHint(QPainter::Antialiasing);
-
-  int side = qMin(width(), height());
-  p.setViewport((width() - side) / 2, (height() - side) / 2, side, side);
-  p.setWindow(-100, -100, 200, 200);
-
+void CompassWidget::drawGaudge(QPainter &p) {
+  // Изображение подложки циферблата
   p.setPen(QPen(Qt::white, 2));
   p.setBrush(Qt::black);
-  p.drawEllipse(0, 0, 190, 190);
+  p.drawEllipse(widgetLeft, widgetTop, widgetWidth, widgetHeight);
 
   p.setFont(QFont("monospace", 9));
   for (int i = 0; i < 360; i += 30) {

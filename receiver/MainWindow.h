@@ -6,6 +6,7 @@
 #include <QProgressBar>
 #include <QTimer>
 #include <QWidget>
+#include <qtmetamacros.h>
 
 class AltimeterWidget;
 class SpeedometerWidget;
@@ -34,43 +35,68 @@ private:
   QTimer *m_uiTimer;
 };
 
+// ---------- BaseGaudgeWidget ----------
+
+class BaseGaudgeWidget : public QWidget {
+  Q_OBJECT
+public:
+  explicit BaseGaudgeWidget(QWidget *parent = nullptr);
+
+protected:
+  // Эти константы задают виртуальные координаты для работы с виджетами
+  // Смещение левого верхнего угла в (-100, -100) позволяет удобно пользоваться
+  // полярной системой координат
+  static constexpr int widgetLeft = -100;
+  static constexpr int widgetTop = -100;
+  static constexpr int widgetWidth = 200;
+  static constexpr int widgetHeight = 200;
+
+  // Правая и нижняя границы
+  static constexpr int widgetRight = widgetLeft + widgetWidth;
+  static constexpr int widgetBottom = widgetTop + widgetHeight;
+
+  void paintEvent(QPaintEvent *event) override;
+
+  virtual void drawGaudge(QPainter &p) = 0;
+};
+
 // ---------- Altimeter ----------
-class AltimeterWidget : public QWidget {
+class AltimeterWidget : public BaseGaudgeWidget {
   Q_OBJECT
 public:
   explicit AltimeterWidget(QWidget *parent = nullptr);
   void setAltitude(float alt);
 
 protected:
-  void paintEvent(QPaintEvent *event) override;
+  void drawGaudge(QPainter &p) override;
 
 private:
   float m_altitude = 0.0f;
 };
 
 // ---------- Speedometer ----------
-class SpeedometerWidget : public QWidget {
+class SpeedometerWidget : public BaseGaudgeWidget {
   Q_OBJECT
 public:
   explicit SpeedometerWidget(QWidget *parent = nullptr);
   void setSpeed(float speed);
 
 protected:
-  void paintEvent(QPaintEvent *event) override;
+  void drawGaudge(QPainter &p) override;
 
 private:
   float m_speed = 0.0f;
 };
 
 // ---------- Attitude (pitch/roll) ----------
-class AttitudeWidget : public QWidget {
+class AttitudeWidget : public BaseGaudgeWidget {
   Q_OBJECT
 public:
   explicit AttitudeWidget(QWidget *parent = nullptr);
   void setPitchRoll(float pitch, float roll);
 
 protected:
-  void paintEvent(QPaintEvent *event) override;
+  void drawGaudge(QPainter &p) override;
 
 private:
   float m_pitch = 0.0f;
@@ -78,14 +104,14 @@ private:
 };
 
 // ---------- Compass (yaw) ----------
-class CompassWidget : public QWidget {
+class CompassWidget : public BaseGaudgeWidget {
   Q_OBJECT
 public:
   explicit CompassWidget(QWidget *parent = nullptr);
   void setYaw(float yaw);
 
 protected:
-  void paintEvent(QPaintEvent *event) override;
+  void drawGaudge(QPainter &p) override;
 
 private:
   float m_yaw = 0.0f;
