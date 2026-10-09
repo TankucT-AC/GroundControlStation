@@ -9,10 +9,10 @@
   },
   {
     "label": "Build & Run Debug",
-    "command": "cmake --preset gcc-debug && cmake --build out/gcc-debug && ./out/gcc-debug/project"
+    "command": "cmake --preset gcc-debug && cmake --build out/gcc-debug && ./out/gcc-debug/receiver/receiver"
   },
   {
     "label": "Build & Run Release",
-    "command": "cmake --preset clang-release && cmake --build out/clang-release && ./out/clang-release/project"
+    "command": "cmake --preset clang-release && cmake --build out/clang-release && ./out/clang-release/receiver/receiver"
   }
 ]
