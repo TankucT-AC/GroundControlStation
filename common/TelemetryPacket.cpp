@@ -3,7 +3,8 @@
 
 static constexpr uint16_t CRC16_CCITT_POLY = 0x1021;
 
-uint16_t TelemetryPacket::crc16(const uint8_t *data, size_t len) {
+uint16_t TelemetryPacket::crc16(const uint8_t *data, size_t len)
+{
     uint16_t crc = 0xFFFF;
     for (size_t i = 0; i < len; ++i) {
         crc ^= static_cast<uint16_t>(data[i]) << 8;
@@ -17,7 +18,8 @@ uint16_t TelemetryPacket::crc16(const uint8_t *data, size_t len) {
     return crc;
 }
 
-void TelemetryPacket::pack(uint8_t *buffer, const TelemetryPacket &pkt) {
+void TelemetryPacket::pack(uint8_t *buffer, const TelemetryPacket &pkt)
+{
     buffer[0] = MAGIC_0;
     buffer[1] = MAGIC_1;
 
@@ -36,7 +38,8 @@ void TelemetryPacket::pack(uint8_t *buffer, const TelemetryPacket &pkt) {
     std::memcpy(buffer + OFFSET_CRC, &crc, sizeof(crc));
 }
 
-std::optional<TelemetryPacket> TelemetryPacket::unpack(const uint8_t *buffer, size_t len) {
+std::optional<TelemetryPacket> TelemetryPacket::unpack(const uint8_t *buffer, size_t len)
+{
     if (len < PACKET_SIZE)
         return std::nullopt;
 

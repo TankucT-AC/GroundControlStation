@@ -2,7 +2,6 @@
 #define TELEMETRYPACKET_H
 
 #include <cstdint>
-#include <vector>
 #include <optional>
 
 struct TelemetryPacket {
