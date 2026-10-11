@@ -58,3 +58,7 @@ compile_commands.json
 # Build files
 /build*/
 /out/
+/.cache/
+
+# IDE files
+/.zed/
