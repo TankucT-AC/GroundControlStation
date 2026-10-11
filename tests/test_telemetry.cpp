@@ -1,5 +1,6 @@
 #include "TelemetryPacket.h"
 #include <QtTest>
+#include <cstring>
 
 class TestTelemetry : public QObject
 {
@@ -11,6 +12,9 @@ private slots:
     void testBadCrc();
     void testTooShort();
     void testBoundaryValues();
+    void testCrcKnownVector();
+    void testCrcEmpty();
+    void testLittleEndian();
 };
 
 void TestTelemetry::testPackUnpack()
@@ -92,6 +96,31 @@ void TestTelemetry::testBoundaryValues()
     QCOMPARE(out.speed, in.speed);
     QCOMPARE(out.battery, in.battery);
     QCOMPARE(out.satellites, in.satellites);
+}
+
+void TestTelemetry::testCrcKnownVector()
+{
+    // CRC-16/CCITT of "123456789" (0x31..0x39) = 0x29B1
+    const uint8_t data[] = {0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39};
+    uint16_t crc = TelemetryPacket::crc16(data, sizeof(data));
+    QCOMPARE(crc, uint16_t(0x29B1));
+}
+
+void TestTelemetry::testCrcEmpty()
+{
+    // CRC-16/CCITT of empty input with init 0xFFFF = 0xFFFF
+    uint16_t crc = TelemetryPacket::crc16(nullptr, 0);
+    QCOMPARE(crc, uint16_t(0xFFFF));
+}
+
+void TestTelemetry::testLittleEndian()
+{
+    uint16_t value = 0x0102;
+    uint8_t buf[2];
+    std::memcpy(buf, &value, sizeof(buf));
+    // On little-endian: buf[0]=0x02, buf[1]=0x01
+    QCOMPARE(buf[0], uint8_t(0x02));
+    QCOMPARE(buf[1], uint8_t(0x01));
 }
 
 QTEST_MAIN(TestTelemetry)
