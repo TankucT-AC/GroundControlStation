@@ -30,6 +30,8 @@ private slots:
 
 private:
     void updateStatusLabel();
+    void updateLinkState();
+    void updateStats();
     void togglePaused();
 
 private:
@@ -41,6 +43,10 @@ private:
     LinkState m_linkState = LinkState::NoData;
     qint64 m_lastPacketMs = 0;
     bool m_paused = false;
+    qint64 m_totalPackets = 0;
+    qint64 m_totalErrors = 0;
+    QVector<qint64> m_rxTimestamps;
+    QElapsedTimer m_sessionTimer;
 
 private:
     AltimeterWidget *m_altimeter;
@@ -54,6 +60,7 @@ private:
     QLabel *m_errorLabel;
     QLabel *m_timestampLabel;
     QLabel *m_statusLabel;
+    QLabel *m_statsLabel;
     QTimer *m_uiTimer;
 };
 

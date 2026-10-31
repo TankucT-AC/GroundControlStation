@@ -16,6 +16,7 @@
 
 static constexpr float PI = 3.14159265358979323846f;
 static constexpr qint64 kLinkTimeoutMs = 2000;
+static constexpr qint64 kRateWindowMs = 3000;
 
 // ============================== MainWindow ==============================
 
@@ -61,6 +62,9 @@ MainWindow::MainWindow(QWidget *parent)
     m_timestampLabel = new QLabel("Waiting for data...", this);
     m_timestampLabel->setFont(captionFont);
 
+    m_statsLabel = new QLabel("RX -- pkt/s | Errors 0 (0.0%) | Uptime 00:00:00", this);
+    m_statsLabel->setFont(valueFont);
+
     m_statusLabel = new QLabel("NO DATA", this);
     QFont statusFont = m_statusLabel->font();
     statusFont.setBold(true);
@@ -81,6 +85,7 @@ MainWindow::MainWindow(QWidget *parent)
     auto *linkGroup = new QGroupBox("Link", this);
     auto *linkLayout = new QVBoxLayout(linkGroup);
     linkLayout->addWidget(m_statusLabel);
+    linkLayout->addWidget(m_statsLabel);
     linkLayout->addWidget(m_errorLabel);
     linkLayout->addWidget(m_timestampLabel);
 
@@ -102,6 +107,7 @@ MainWindow::MainWindow(QWidget *parent)
     m_uiTimer = new QTimer(this);
     connect(m_uiTimer, &QTimer::timeout, this, &MainWindow::onWatchdogTick);
     m_uiTimer->start(1000);
+    m_sessionTimer.start();
 
     // Пауза отображения: данные принимаются, приборы заморожены
     auto *pauseShortcut = new QShortcut(QKeySequence(Qt::Key_Space), this);
@@ -110,9 +116,11 @@ MainWindow::MainWindow(QWidget *parent)
 
 void MainWindow::onTelemetryReceived(const TelemetryPacket &pkt)
 {
-    // Состояние линии живёт всегда, даже на паузе
+    // Состояние линии и статистика живут всегда, даже на паузе
     m_linkState = LinkState::Live;
     m_lastPacketMs = QDateTime::currentMSecsSinceEpoch();
+    ++m_totalPackets;
+    m_rxTimestamps.append(m_lastPacketMs);
     m_altimeter->setStale(false);
     m_speedometer->setStale(false);
     m_attitude->setStale(false);
@@ -157,6 +165,7 @@ void MainWindow::onTelemetryReceived(const TelemetryPacket &pkt)
 
 void MainWindow::onErrorCountChanged(int count)
 {
+    m_totalErrors = count;
     m_errorLabel->setText(QString("Errors: %1").arg(count));
 }
 
@@ -167,6 +176,12 @@ void MainWindow::onLinkError(const QString &message)
 }
 
 void MainWindow::onWatchdogTick()
+{
+    updateLinkState();
+    updateStats();
+}
+
+void MainWindow::updateLinkState()
 {
     if (m_lastPacketMs <= 0)
         return;
@@ -182,6 +197,32 @@ void MainWindow::onWatchdogTick()
     }
     if (m_linkState == LinkState::Lost && !m_paused)
         m_timestampLabel->setText(QString("Last packet %1 s ago").arg(ageMs / 1000));
+}
+
+void MainWindow::updateStats()
+{
+    const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
+
+    // Скорость приёма: пакеты за последние kRateWindowMs секунд
+    while (!m_rxTimestamps.isEmpty() && m_rxTimestamps.first() < nowMs - kRateWindowMs)
+        m_rxTimestamps.removeFirst();
+    const double pktPerSec = m_rxTimestamps.size() / (kRateWindowMs / 1000.0);
+
+    // Доля ошибок от всех датаграмм (хорошие + битые)
+    const qint64 totalDatagrams = m_totalPackets + m_totalErrors;
+    const double errPercent = totalDatagrams > 0 ? 100.0 * m_totalErrors / totalDatagrams : 0.0;
+
+    const qint64 upSec = m_sessionTimer.elapsed() / 1000;
+    const QString uptime = QString("%1:%2:%3")
+                               .arg(upSec / 3600, 2, 10, QChar('0'))
+                               .arg((upSec / 60) % 60, 2, 10, QChar('0'))
+                               .arg(upSec % 60, 2, 10, QChar('0'));
+
+    m_statsLabel->setText(QString("RX %1 pkt/s | Errors %2 (%3%) | Uptime %4")
+                              .arg(pktPerSec, 0, 'f', 1)
+                              .arg(m_totalErrors)
+                              .arg(errPercent, 0, 'f', 1)
+                              .arg(uptime));
 }
 
 void MainWindow::togglePaused()
