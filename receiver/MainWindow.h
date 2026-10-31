@@ -102,6 +102,27 @@ protected:
     static constexpr int widgetRight = widgetLeft + widgetWidth;
     static constexpr int widgetBottom = widgetTop + widgetHeight;
 
+    // Общая геометрия циферблатов (виртуальные координаты)
+    static constexpr int kTickOuterR = 85; // внешний радиус делений
+    static constexpr int kTickMinorR = 80; // внутренний радиус минорного деления
+    static constexpr int kTickMajorR = 75; // внутренний радиус мажорного деления
+    static constexpr int kLabelR = 63; // радиус цифровых меток
+    static constexpr int kNeedleLen = 70; // длина стрелки
+    static constexpr float kNeedleTau = 0.15f; // постоянная демпфирования стрелки, с
+    static constexpr float kAnimEpsilon = 0.05f; // порог сходимости анимации
+
+    // Спецификация линейной шкалы «значение -> угол» для круглых циферблатов
+    struct DialSpec {
+        float maxValue; // максимум шкалы
+        float startDeg; // угол начала
+        float sweepDeg; // размах шкалы, градусов
+        int tickCount; // число делений (включая нулевое)
+        int majorEvery; // каждое N-е деление длинное, с цифрой
+    };
+
+    // Общая отрисовка круглого циферблата (подложка, шкала, стрелка, значение)
+    void drawLinearDial(QPainter &p, const DialSpec &spec, float shownValue, const QString &caption, const QString &unit);
+
     void paintEvent(QPaintEvent *event) override;
 
     // Демпфирование стрелки: экспоненциальное приближение current к target, tau в секундах.
@@ -116,6 +137,7 @@ private:
     bool m_stale = false;
     float m_dt = 0.0f;
     bool m_animating = false;
+    bool m_updateScheduled = false;
     QElapsedTimer m_frameTimer;
 };
 

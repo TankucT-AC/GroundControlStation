@@ -37,8 +37,8 @@ void HistoryChart::computeRange(float &minV, float &maxV) const
     }
     minV = maxV = m_samples.front().value;
     for (const Sample &s : m_samples) {
-        minV = std::min(minV, s.value);
-        maxV = std::max(maxV, s.value);
+        minV = (std::min)(minV, s.value);
+        maxV = (std::max)(maxV, s.value);
     }
     if (maxV - minV < 1e-3f) {
         // Плоский ряд — расширяем диапазон, иначе деление на ноль
@@ -91,7 +91,7 @@ void HistoryChart::paintEvent(QPaintEvent *event)
     // Заголовок слева и текущее значение справа
     const QString current = m_samples.empty() ? QString("--") : QString::number(m_samples.back().value, 'f', 1);
     p.setPen(Theme::textPrimary);
-    p.setFont(Theme::fixedFont(8, true));
+    p.setFont(Theme::fixedFontBold(8));
     p.drawText(QPoint(plot.left(), rect().top() + 12), m_title + " [" + m_unit + "]");
     p.drawText(QRect(plot.left(), rect().top(), plot.width(), 14), Qt::AlignRight | Qt::AlignVCenter, current);
 

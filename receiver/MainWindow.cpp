@@ -15,6 +15,7 @@
 #include <QShortcut>
 #include <QTextStream>
 #include <QVBoxLayout>
+#include <chrono>
 #include <cmath>
 #include <qwidget.h>
 
@@ -126,7 +127,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     m_uiTimer = new QTimer(this);
     connect(m_uiTimer, &QTimer::timeout, this, &MainWindow::onWatchdogTick);
-    m_uiTimer->start(1000);
+    m_uiTimer->start(std::chrono::seconds(1));
     m_sessionTimer.start();
 
     // Пауза отображения: данные принимаются, приборы заморожены
@@ -197,8 +198,9 @@ void MainWindow::onTelemetryReceived(const TelemetryPacket &pkt)
 
     m_satLabel->setText(QString("Satellites: %1").arg(pkt.satellites));
 
+    // Поле timestamp пакета — uint32 и переполняется; показываем локальное время приёма
     QDateTime dt;
-    dt.setMSecsSinceEpoch(static_cast<qint64>(pkt.timestamp));
+    dt.setMSecsSinceEpoch(m_lastPacketMs);
     m_timestampLabel->setText("Last: " + dt.toString("hh:mm:ss.zzz"));
 }
 
@@ -218,8 +220,14 @@ void MainWindow::onWatchdogTick()
 {
     updateLinkState();
     updateStats();
-    if (m_csvFile.isOpen())
+    if (m_csvFile.isOpen()) {
         m_csvStream.flush();
+        // Ошибка записи (диск заполнен и т.п.): сообщаем и выключаем журнал
+        if (m_csvStream.status() != QTextStream::Ok) {
+            QMessageBox::warning(this, "CSV log", "Writing to the CSV file failed, logging stopped");
+            m_csvCheck->setChecked(false);
+        }
+    }
 }
 
 void MainWindow::updateLinkState()
@@ -281,6 +289,8 @@ void MainWindow::onCsvToggled(bool on)
             m_csvCheck->setChecked(false);
             return;
         }
+        // Статус потока «липкий»: без сброса ошибка старого файла убивала бы запись в новый
+        m_csvStream.resetStatus();
         m_csvStream << "local_time,timestamp_ms,altitude_m,speed_ms,pitch_deg,roll_deg,yaw_deg,latitude,longitude,battery_pct,satellites\n";
         m_csvPathLabel->setText(path);
     } else {
@@ -333,7 +343,7 @@ float BaseGaugeWidget::stepTowards(float current, float target, float tau)
 {
     const float k = 1.0f - std::exp(-m_dt / tau);
     const float next = current + (target - current) * k;
-    if (std::abs(target - next) > 0.05f)
+    if (std::abs(target - next) > kAnimEpsilon)
         m_animating = true;
     return next;
 }
@@ -376,14 +386,66 @@ void BaseGaugeWidget::paintEvent(QPaintEvent *event)
         p.setPen(Qt::NoPen);
         p.setBrush(QColor(0, 0, 0, 170));
         p.drawRect(widgetLeft, widgetTop, widgetWidth, widgetHeight);
-        p.setFont(Theme::fixedFont(11, true));
+        p.setFont(Theme::fixedFontBold(11));
         p.setPen(Theme::textDim);
         p.drawText(QRect(widgetLeft, widgetTop, widgetWidth, widgetHeight), Qt::AlignCenter, "NO DATA");
     }
 
-    // Стрелка ещё не дошла до цели — просим следующий кадр
-    if (m_animating)
-        update();
+    // Стрелка ещё не дошла до цели — просим следующий кадр не чаще ~60 к/с
+    if (m_animating && !m_updateScheduled) {
+        m_updateScheduled = true;
+        QTimer::singleShot(16, this, [this] {
+            m_updateScheduled = false;
+            update();
+        });
+    }
+}
+
+void BaseGaugeWidget::drawLinearDial(QPainter &p, const DialSpec &spec, float shownValue, const QString &caption, const QString &unit)
+{
+    // Подложка циферблата
+    p.setPen(QPen(Theme::outline, 2));
+    p.setBrush(Theme::gaugeFace);
+    p.drawEllipse(widgetLeft, widgetTop, widgetWidth, widgetHeight);
+
+    // Подпись прибора
+    p.setPen(Theme::textPrimary);
+    p.setFont(Theme::fixedFont(9));
+    p.drawText(-30, -70, caption);
+
+    // Шкала: деления и цифровые метки на мажорных
+    p.setFont(Theme::fixedFont(7));
+    const float step = spec.maxValue / spec.tickCount;
+    for (int i = 0; i <= spec.tickCount; ++i) {
+        const float val = i * step;
+        const float a = spec.startDeg + (val / spec.maxValue) * spec.sweepDeg;
+        const float rad = a * PI / 180.0f;
+        const bool major = (i % spec.majorEvery == 0);
+        const int rInner = major ? kTickMajorR : kTickMinorR;
+        p.setPen(Theme::textPrimary);
+        p.drawLine(static_cast<int>(kTickOuterR * std::cos(rad)),
+                   static_cast<int>(kTickOuterR * std::sin(rad)),
+                   static_cast<int>(rInner * std::cos(rad)),
+                   static_cast<int>(rInner * std::sin(rad)));
+        if (major) {
+            const int lx = static_cast<int>(kLabelR * std::cos(rad));
+            const int ly = static_cast<int>(kLabelR * std::sin(rad));
+            p.setPen(Theme::textDim);
+            p.drawText(QRect(lx - 12, ly - 7, 24, 14), Qt::AlignCenter, QString::number(static_cast<int>(val)));
+        }
+    }
+
+    // Стрелка
+    const float clamped = std::clamp(shownValue, 0.0f, spec.maxValue);
+    const float needleAngle = spec.startDeg + (clamped / spec.maxValue) * spec.sweepDeg;
+    const float needleRad = needleAngle * PI / 180.0f;
+    p.setPen(QPen(Theme::needle, 3));
+    p.drawLine(0, 0, static_cast<int>(kNeedleLen * std::cos(needleRad)), static_cast<int>(kNeedleLen * std::sin(needleRad)));
+
+    // Цифровое значение с единицей измерения
+    p.setPen(Theme::textPrimary);
+    p.setFont(Theme::fixedFontBold(11));
+    p.drawText(-25, 10, QString::number(static_cast<int>(shownValue)) + unit);
 }
 
 // ============================== AltimeterWidget ==============================
@@ -402,55 +464,10 @@ void AltimeterWidget::setAltitude(float alt)
 void AltimeterWidget::drawGauge(QPainter &p)
 {
     // Демпфированное отображаемое значение
-    m_altitudeShown = stepTowards(m_altitudeShown, m_altitude, 0.15f);
+    m_altitudeShown = stepTowards(m_altitudeShown, m_altitude, kNeedleTau);
 
-    // Изображение подложки циферблата
-    p.setPen(QPen(Theme::outline, 2));
-    p.setBrush(Theme::gaugeFace);
-    p.drawEllipse(widgetLeft, widgetTop, widgetWidth, widgetHeight);
-
-    // Изображение текста (ALT)
-    p.setPen(Theme::textPrimary);
-    p.setFont(Theme::fixedFont(9));
-    p.drawText(-30, -70, "ALT");
-
-    // Изображение шкалы циферблата
-    float angle = 0.0f;
-    for (int i = 0; i <= 20; ++i) {
-        float altVal = i * 10.0f;
-        // Трансляция высоты в градусы со смещением на 135 градусов
-        float a = -135.0f + (altVal / 200.0f) * 270.0f;
-        float rad = a * PI / 180.0f;
-        int rOuter = 85;
-        int rInner = (i % 5 == 0) ? 75 : 80;
-        int x1 = static_cast<int>(rOuter * std::cos(rad));
-        int y1 = static_cast<int>(rOuter * std::sin(rad));
-        int x2 = static_cast<int>(rInner * std::cos(rad));
-        int y2 = static_cast<int>(rInner * std::sin(rad));
-        p.setPen(Theme::textPrimary);
-        p.drawLine(x1, y1, x2, y2);
-
-        // Цифровая метка на каждом пятом штрихе (0, 50, 100, 150, 200)
-        if (i % 5 == 0) {
-            int lx = static_cast<int>(63 * std::cos(rad));
-            int ly = static_cast<int>(63 * std::sin(rad));
-            p.setPen(Theme::textDim);
-            p.setFont(Theme::fixedFont(7));
-            p.drawText(QRect(lx - 12, ly - 7, 24, 14), Qt::AlignCenter, QString::number(static_cast<int>(altVal)));
-        }
-    }
-
-    // Расчет положения и изображение стрелки циферблата
-    float clamped = std::clamp(m_altitudeShown, 0.0f, 200.0f);
-    float needleAngle = -135.0f + (clamped / 200.0f) * 270.0f;
-    float needleRad = needleAngle * PI / 180.0f;
-    p.setPen(QPen(Theme::needle, 3));
-    p.drawLine(0, 0, static_cast<int>(70 * std::cos(needleRad)), static_cast<int>(70 * std::sin(needleRad)));
-
-    // Изображение единицы измерения шкалы высоты
-    p.setPen(Theme::textPrimary);
-    p.setFont(Theme::fixedFont(11, true));
-    p.drawText(-25, 10, QString::number(static_cast<int>(m_altitudeShown)) + "m");
+    static constexpr DialSpec spec{200.0f, -135.0f, 270.0f, 20, 5}; // 0..200 м, деления каждые 10, метки каждые 50
+    drawLinearDial(p, spec, m_altitudeShown, "ALT", "m");
 }
 
 // =============== SpeedometerWidget =================
@@ -469,54 +486,10 @@ void SpeedometerWidget::setSpeed(float speed)
 void SpeedometerWidget::drawGauge(QPainter &p)
 {
     // Демпфированное отображаемое значение
-    m_speedShown = stepTowards(m_speedShown, m_speed, 0.15f);
+    m_speedShown = stepTowards(m_speedShown, m_speed, kNeedleTau);
 
-    // Изображение подложки циферблата
-    p.setPen(QPen(Theme::outline, 2));
-    p.setBrush(Theme::gaugeFace);
-    p.drawEllipse(widgetLeft, widgetTop, widgetWidth, widgetHeight);
-
-    // Изображение текста (SPD)
-    p.setPen(Theme::textPrimary);
-    p.setFont(Theme::fixedFont(9));
-    p.drawText(-30, -70, "SPD");
-
-    // Отрисовка шкалы циферблата
-    for (int i = 0; i <= 12; ++i) {
-        float spdVal = i * 5.0f;
-        // Перевод скорости в градусы со смещением на -120 градусов
-        float a = -120.0f + (spdVal / 60.0f) * 240.0f;
-        float rad = a * PI / 180.0f;
-        int rOuter = 85;
-        int rInner = (i % 3 == 0) ? 75 : 80;
-        int x1 = static_cast<int>(rOuter * std::cos(rad));
-        int y1 = static_cast<int>(rOuter * std::sin(rad));
-        int x2 = static_cast<int>(rInner * std::cos(rad));
-        int y2 = static_cast<int>(rInner * std::sin(rad));
-        p.setPen(Theme::textPrimary);
-        p.drawLine(x1, y1, x2, y2);
-
-        // Цифровая метка на каждом третьем штрихе (0, 15, 30, 45, 60)
-        if (i % 3 == 0) {
-            int lx = static_cast<int>(63 * std::cos(rad));
-            int ly = static_cast<int>(63 * std::sin(rad));
-            p.setPen(Theme::textDim);
-            p.setFont(Theme::fixedFont(7));
-            p.drawText(QRect(lx - 12, ly - 7, 24, 14), Qt::AlignCenter, QString::number(static_cast<int>(spdVal)));
-        }
-    }
-
-    // Расчет угла и изображение стрелки спидометра
-    float clamped = std::clamp(m_speedShown, 0.0f, 60.0f);
-    float needleAngle = -120.0f + (clamped / 60.0f) * 240.0f;
-    float needleRad = needleAngle * PI / 180.0f;
-    p.setPen(QPen(Theme::needle, 3));
-    p.drawLine(0, 0, static_cast<int>(70 * std::cos(needleRad)), static_cast<int>(70 * std::sin(needleRad)));
-
-    // Изображение текста единицы измерения скорости
-    p.setPen(Theme::textPrimary);
-    p.setFont(Theme::fixedFont(11, true));
-    p.drawText(-25, 10, QString::number(static_cast<int>(m_speedShown)) + "m/s");
+    static constexpr DialSpec spec{60.0f, -120.0f, 240.0f, 12, 3}; // 0..60 м/с, деления каждые 5, метки каждые 15
+    drawLinearDial(p, spec, m_speedShown, "SPD", "m/s");
 }
 
 // ============================== AttitudeWidget ==============================
@@ -536,15 +509,14 @@ void AttitudeWidget::setPitchRoll(float pitch, float roll)
 void AttitudeWidget::drawGauge(QPainter &p)
 {
     // Демпфированные отображаемые значения
-    m_pitchShown = stepTowards(m_pitchShown, m_pitch, 0.15f);
-    m_rollShown = stepTowards(m_rollShown, m_roll, 0.15f);
+    m_pitchShown = stepTowards(m_pitchShown, m_pitch, kNeedleTau);
+    m_rollShown = stepTowards(m_rollShown, m_roll, kNeedleTau);
 
     // Включаем обрезку по рамке
     p.setClipRect(widgetLeft + 2, widgetTop + 2, widgetWidth - 4, widgetHeight - 4);
 
     // Рисование динамичной части
     p.save();
-    p.translate(0, 0);
     p.rotate(-m_rollShown);
 
     int pitchOffset = static_cast<int>(m_pitchShown * 2.0f);
@@ -620,7 +592,7 @@ void CompassWidget::setYaw(float yaw)
 void CompassWidget::drawGauge(QPainter &p)
 {
     // Демпфированное значение с переходом через 360°
-    m_yawShown = stepTowardsAngle(m_yawShown, m_yaw, 0.15f);
+    m_yawShown = stepTowardsAngle(m_yawShown, m_yaw, kNeedleTau);
     // Изображение подложки циферблата
     p.setPen(QPen(Theme::outline, 2));
     p.setBrush(Theme::gaugeFace);
@@ -629,12 +601,12 @@ void CompassWidget::drawGauge(QPainter &p)
     p.setFont(Theme::fixedFont(8));
     for (int i = 0; i < 360; i += 30) {
         float rad = (i - 90.0f) * PI / 180.0f;
-        int rOuter = 85;
-        int rInner = (i % 90 == 0) ? 72 : 80;
-        int x1 = static_cast<int>(rOuter * std::cos(rad));
-        int y1 = static_cast<int>(rOuter * std::sin(rad));
+        int rInner = (i % 90 == 0) ? 72 : kTickMinorR;
+        int x1 = static_cast<int>(kTickOuterR * std::cos(rad));
+        int y1 = static_cast<int>(kTickOuterR * std::sin(rad));
         int x2 = static_cast<int>(rInner * std::cos(rad));
         int y2 = static_cast<int>(rInner * std::sin(rad));
+        p.setPen(Theme::textPrimary);
         p.drawLine(x1, y1, x2, y2);
 
         if (i % 90 == 0) {
@@ -661,10 +633,10 @@ void CompassWidget::drawGauge(QPainter &p)
 
     float needleRad = (m_yawShown - 90.0f) * PI / 180.0f;
     p.setPen(QPen(Theme::needle, 3));
-    p.drawLine(0, 0, static_cast<int>(70 * std::cos(needleRad)), static_cast<int>(70 * std::sin(needleRad)));
+    p.drawLine(0, 0, static_cast<int>(kNeedleLen * std::cos(needleRad)), static_cast<int>(kNeedleLen * std::sin(needleRad)));
 
     p.setPen(Theme::textPrimary);
-    p.setFont(Theme::fixedFont(9, true));
+    p.setFont(Theme::fixedFontBold(9));
     int yawNorm = static_cast<int>(std::fmod(m_yawShown, 360.0f));
     if (yawNorm < 0)
         yawNorm += 360;

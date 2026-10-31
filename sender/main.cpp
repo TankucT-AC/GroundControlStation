@@ -6,6 +6,7 @@
 #include <QTimer>
 #include <QUdpSocket>
 #include <cmath>
+#include <cstdio>
 
 static constexpr float PI = 3.14159265358979323846f;
 static constexpr double BASE_LAT = 55.751244;
@@ -31,9 +32,24 @@ int main(int argc, char *argv[])
     parser.addOption(rateOpt);
     parser.process(app);
 
-    auto port = static_cast<quint16>(parser.value(portOpt).toUInt());
+    // Валидация: невалидный порт/интервал не должен молча превращаться в 0
+    bool portOk = false;
+    auto port = static_cast<quint16>(parser.value(portOpt).toUShort(&portOk));
+    if (!portOk || port == 0) {
+        fprintf(stderr, "Invalid port '%s'\n", qPrintable(parser.value(portOpt)));
+        return 1;
+    }
     QHostAddress addr(parser.value(addrOpt));
-    int rateMs = parser.value(rateOpt).toInt();
+    if (addr.isNull()) {
+        fprintf(stderr, "Invalid address '%s'\n", qPrintable(parser.value(addrOpt)));
+        return 1;
+    }
+    bool rateOk = false;
+    int rateMs = parser.value(rateOpt).toInt(&rateOk);
+    if (!rateOk || rateMs <= 0) {
+        fprintf(stderr, "Invalid rate '%s' (must be a positive number of milliseconds)\n", qPrintable(parser.value(rateOpt)));
+        return 1;
+    }
 
     QUdpSocket socket;
     QTimer timer;

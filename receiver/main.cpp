@@ -5,6 +5,8 @@
 #include <QCommandLineParser>
 #include <QPalette>
 #include <QThread>
+#include <chrono>
+#include <cstdio>
 
 int main(int argc, char *argv[])
 {
@@ -36,7 +38,13 @@ int main(int argc, char *argv[])
     QCommandLineOption portOpt({"p", "port"}, "UDP port to listen on", "port", "12345");
     parser.addOption(portOpt);
     parser.process(app);
-    quint16 port = static_cast<quint16>(parser.value(portOpt).toUShort());
+
+    bool portOk = false;
+    const quint16 port = parser.value(portOpt).toUShort(&portOk);
+    if (!portOk || port == 0) {
+        fprintf(stderr, "Invalid port '%s'\n", qPrintable(parser.value(portOpt)));
+        return 1;
+    }
 
     MainWindow window;
     window.show();
@@ -56,7 +64,8 @@ int main(int argc, char *argv[])
     int ret = app.exec();
 
     workerThread->quit();
-    workerThread->wait();
+    if (!workerThread->wait(std::chrono::seconds(2)))
+        qWarning("Worker thread did not finish in time");
     delete workerThread;
 
     return ret;

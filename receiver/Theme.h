@@ -39,13 +39,20 @@ inline BatteryState batteryState(int percent)
     return BatteryState::Ok;
 }
 
-// Системный моноширинный шрифт заданного кегля — для цифровых значений приборов
-inline QFont fixedFont(int pointSize, bool bold = false)
+// Системный моноширинный шрифт заданного кегля — для цифровых значений приборов.
+// Базовый шрифт создаётся один раз (QFont — COW, копирование дёшево).
+inline QFont fixedFont(int pointSize)
 {
-    QFont font = QFontDatabase::systemFont(QFontDatabase::FixedFont);
+    static const QFont base = QFontDatabase::systemFont(QFontDatabase::FixedFont);
+    QFont font = base;
     font.setPointSize(pointSize);
-    if (bold)
-        font.setBold(true);
+    return font;
+}
+
+inline QFont fixedFontBold(int pointSize)
+{
+    QFont font = fixedFont(pointSize);
+    font.setBold(true);
     return font;
 }
 
