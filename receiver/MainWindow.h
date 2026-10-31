@@ -3,8 +3,10 @@
 
 #include "TelemetryPacket.h"
 #include <QElapsedTimer>
+#include <QFile>
 #include <QLabel>
 #include <QProgressBar>
+#include <QTextStream>
 #include <QTimer>
 #include <QWidget>
 #include <qtmetamacros.h>
@@ -13,12 +15,14 @@ class AltimeterWidget;
 class SpeedometerWidget;
 class AttitudeWidget;
 class CompassWidget;
+class QCheckBox;
 
 class MainWindow : public QWidget
 {
     Q_OBJECT
 public:
     explicit MainWindow(QWidget *parent = nullptr);
+    ~MainWindow() override;
 
 public slots:
     void onTelemetryReceived(const TelemetryPacket &pkt);
@@ -27,6 +31,7 @@ public slots:
 
 private slots:
     void onWatchdogTick();
+    void onCsvToggled(bool on);
 
 private:
     void updateStatusLabel();
@@ -61,7 +66,13 @@ private:
     QLabel *m_timestampLabel;
     QLabel *m_statusLabel;
     QLabel *m_statsLabel;
+    QCheckBox *m_csvCheck;
+    QLabel *m_csvPathLabel;
     QTimer *m_uiTimer;
+
+    // CSV-журнал: пишется только вне паузы, буфер сбрасывается раз в секунду
+    QFile m_csvFile;
+    QTextStream m_csvStream{&m_csvFile};
 };
 
 // ---------- BaseGaugeWidget ----------

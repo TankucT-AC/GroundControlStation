@@ -1,7 +1,9 @@
 #include "MainWindow.h"
 #include "Theme.h"
 #include <QApplication>
+#include <QCheckBox>
 #include <QDateTime>
+#include <QFileDialog>
 #include <QFont>
 #include <QGridLayout>
 #include <QGroupBox>
@@ -10,6 +12,7 @@
 #include <QPainter>
 #include <QPen>
 #include <QShortcut>
+#include <QTextStream>
 #include <QVBoxLayout>
 #include <cmath>
 #include <qwidget.h>
@@ -89,6 +92,13 @@ MainWindow::MainWindow(QWidget *parent)
     linkLayout->addWidget(m_errorLabel);
     linkLayout->addWidget(m_timestampLabel);
 
+    m_csvCheck = new QCheckBox("CSV log", this);
+    connect(m_csvCheck, &QCheckBox::toggled, this, &MainWindow::onCsvToggled);
+    m_csvPathLabel = new QLabel("no file", this);
+    m_csvPathLabel->setFont(captionFont);
+    linkLayout->addWidget(m_csvCheck);
+    linkLayout->addWidget(m_csvPathLabel);
+
     auto *topLayout = new QHBoxLayout;
     topLayout->addWidget(m_altimeter, 1);
     topLayout->addWidget(m_speedometer, 1);
@@ -114,6 +124,14 @@ MainWindow::MainWindow(QWidget *parent)
     connect(pauseShortcut, &QShortcut::activated, this, &MainWindow::togglePaused);
 }
 
+MainWindow::~MainWindow()
+{
+    if (m_csvFile.isOpen()) {
+        m_csvStream.flush();
+        m_csvFile.close();
+    }
+}
+
 void MainWindow::onTelemetryReceived(const TelemetryPacket &pkt)
 {
     // Состояние линии и статистика живут всегда, даже на паузе
@@ -130,6 +148,14 @@ void MainWindow::onTelemetryReceived(const TelemetryPacket &pkt)
     // Пауза замораживает отображаемые значения, но не приём
     if (m_paused)
         return;
+
+    // Журнал CSV: числа в C-локали (точка), вне зависимости от локали интерфейса
+    if (m_csvFile.isOpen()) {
+        m_csvStream << QDateTime::currentDateTime().toString(Qt::ISODateWithMs) << ',' << pkt.timestamp << ',' << QString::number(pkt.altitude, 'f', 2)
+                    << ',' << QString::number(pkt.speed, 'f', 2) << ',' << QString::number(pkt.pitch, 'f', 2) << ',' << QString::number(pkt.roll, 'f', 2)
+                    << ',' << QString::number(pkt.yaw, 'f', 2) << ',' << QString::number(pkt.latitude, 'f', 6) << ',' << QString::number(pkt.longitude, 'f', 6)
+                    << ',' << pkt.battery << ',' << pkt.satellites << '\n';
+    }
 
     m_altimeter->setAltitude(pkt.altitude);
     m_speedometer->setSpeed(pkt.speed);
@@ -179,6 +205,8 @@ void MainWindow::onWatchdogTick()
 {
     updateLinkState();
     updateStats();
+    if (m_csvFile.isOpen())
+        m_csvStream.flush();
 }
 
 void MainWindow::updateLinkState()
@@ -229,6 +257,31 @@ void MainWindow::togglePaused()
 {
     m_paused = !m_paused;
     updateStatusLabel();
+}
+
+void MainWindow::onCsvToggled(bool on)
+{
+    if (on) {
+        const QString path = QFileDialog::getSaveFileName(this, "CSV log file", "telemetry.csv", "CSV files (*.csv)");
+        if (path.isEmpty()) {
+            m_csvCheck->setChecked(false); // отмена диалога — выключаем тумблер обратно
+            return;
+        }
+        m_csvFile.setFileName(path);
+        if (!m_csvFile.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+            QMessageBox::warning(this, "CSV log", "Cannot open file for writing");
+            m_csvCheck->setChecked(false);
+            return;
+        }
+        m_csvStream << "local_time,timestamp_ms,altitude_m,speed_ms,pitch_deg,roll_deg,yaw_deg,latitude,longitude,battery_pct,satellites\n";
+        m_csvPathLabel->setText(path);
+    } else {
+        if (m_csvFile.isOpen()) {
+            m_csvStream.flush();
+            m_csvFile.close();
+        }
+        m_csvPathLabel->setText("no file");
+    }
 }
 
 void MainWindow::updateStatusLabel()
