@@ -2,6 +2,7 @@
 #include "Theme.h"
 #include "UdpWorker.h"
 #include <QApplication>
+#include <QCommandLineParser>
 #include <QPalette>
 #include <QThread>
 
@@ -28,10 +29,17 @@ int main(int argc, char *argv[])
     dark.setColor(QPalette::Disabled, QPalette::ButtonText, Theme::textDim);
     app.setPalette(dark);
 
+    QCommandLineParser parser;
+    parser.setApplicationDescription("Receives binary UAV telemetry over UDP and shows the dashboard");
+    parser.addHelpOption();
+    parser.addVersionOption();
+    QCommandLineOption portOpt({"p", "port"}, "UDP port to listen on", "port", "12345");
+    parser.addOption(portOpt);
+    parser.process(app);
+    quint16 port = static_cast<quint16>(parser.value(portOpt).toUShort());
+
     MainWindow window;
     window.show();
-
-    quint16 port = 12345;
 
     auto *workerThread = new QThread;
     auto *worker = new UdpWorker(port);
