@@ -1,4 +1,5 @@
 #include "MainWindow.h"
+#include "Theme.h"
 #include <QApplication>
 #include <QDateTime>
 #include <QFont>
@@ -21,36 +22,43 @@ MainWindow::MainWindow(QWidget *parent)
     : QWidget(parent)
 {
     setWindowTitle("UAV Telemetry Receiver");
-    resize(900, 700);
+    resize(1020, 720);
 
+    // Приборы: равные доли строки
     m_altimeter = new AltimeterWidget(this);
-    m_altimeter->setMinimumSize(200, 200);
-
     m_speedometer = new SpeedometerWidget(this);
-    m_speedometer->setMinimumSize(200, 200);
-
     m_attitude = new AttitudeWidget(this);
-    m_attitude->setMinimumSize(250, 250);
-
     m_compass = new CompassWidget(this);
-    m_compass->setMinimumSize(200, 200);
+    QWidget *gauges[] = {m_altimeter, m_speedometer, m_attitude, m_compass};
+    for (QWidget *gauge : gauges) {
+        gauge->setMinimumSize(200, 200);
+        gauge->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    }
+
+    // Типографика: значения — 11 pt моно, подписи — 9 pt
+    QFont valueFont = QFontDatabase::systemFont(QFontDatabase::FixedFont);
+    valueFont.setPointSizeF(11);
+    QFont captionFont;
+    captionFont.setPointSizeF(9);
 
     m_gpsLabel = new QLabel("Lat: --\nLon: --", this);
-    m_gpsLabel->setStyleSheet("font-size: 14px; padding: 4px;");
+    m_gpsLabel->setFont(valueFont);
 
-    m_batteryLabel = new QLabel("Battery:", this);
+    m_satLabel = new QLabel("Satellites: --", this);
+    m_satLabel->setFont(valueFont);
+
+    m_batteryLabel = new QLabel("Battery: --", this);
+    m_batteryLabel->setFont(valueFont);
+
     m_batteryBar = new QProgressBar(this);
     m_batteryBar->setRange(0, 100);
     m_batteryBar->setTextVisible(true);
 
-    m_satLabel = new QLabel("Satellites: --", this);
-    m_satLabel->setStyleSheet("font-size: 14px; padding: 4px;");
-
     m_errorLabel = new QLabel("Errors: 0", this);
-    m_errorLabel->setStyleSheet("font-size: 12px; color: red; padding: 4px;");
+    m_errorLabel->setFont(captionFont);
 
     m_timestampLabel = new QLabel("Waiting for data...", this);
-    m_timestampLabel->setStyleSheet("font-size: 12px; padding: 4px;");
+    m_timestampLabel->setFont(captionFont);
 
     m_statusLabel = new QLabel("NO DATA", this);
     QFont statusFont = m_statusLabel->font();
@@ -58,24 +66,37 @@ MainWindow::MainWindow(QWidget *parent)
     m_statusLabel->setFont(statusFont);
     updateStatusLabel();
 
-    auto *topLayout = new QHBoxLayout;
-    topLayout->addWidget(m_altimeter);
-    topLayout->addWidget(m_speedometer);
-    topLayout->addWidget(m_attitude);
-    topLayout->addWidget(m_compass);
+    // Группировка информации: GPS / Power / Link
+    auto *gpsGroup = new QGroupBox("GPS", this);
+    auto *gpsLayout = new QVBoxLayout(gpsGroup);
+    gpsLayout->addWidget(m_gpsLabel);
+    gpsLayout->addWidget(m_satLabel);
 
-    auto *infoLayout = new QGridLayout;
-    infoLayout->addWidget(m_gpsLabel, 0, 0);
-    infoLayout->addWidget(m_batteryLabel, 0, 1);
-    infoLayout->addWidget(m_batteryBar, 0, 2);
-    infoLayout->addWidget(m_satLabel, 1, 0);
-    infoLayout->addWidget(m_errorLabel, 1, 1);
-    infoLayout->addWidget(m_statusLabel, 1, 2);
-    infoLayout->addWidget(m_timestampLabel, 2, 0, 1, 3);
+    auto *powerGroup = new QGroupBox("Power", this);
+    auto *powerLayout = new QVBoxLayout(powerGroup);
+    powerLayout->addWidget(m_batteryLabel);
+    powerLayout->addWidget(m_batteryBar);
+
+    auto *linkGroup = new QGroupBox("Link", this);
+    auto *linkLayout = new QVBoxLayout(linkGroup);
+    linkLayout->addWidget(m_statusLabel);
+    linkLayout->addWidget(m_errorLabel);
+    linkLayout->addWidget(m_timestampLabel);
+
+    auto *topLayout = new QHBoxLayout;
+    topLayout->addWidget(m_altimeter, 1);
+    topLayout->addWidget(m_speedometer, 1);
+    topLayout->addWidget(m_attitude, 1);
+    topLayout->addWidget(m_compass, 1);
+
+    auto *infoRow = new QHBoxLayout;
+    infoRow->addWidget(gpsGroup, 1);
+    infoRow->addWidget(powerGroup, 1);
+    infoRow->addWidget(linkGroup, 2);
 
     auto *mainLayout = new QVBoxLayout(this);
-    mainLayout->addLayout(topLayout);
-    mainLayout->addLayout(infoLayout);
+    mainLayout->addLayout(topLayout, 3);
+    mainLayout->addLayout(infoRow, 1);
 
     m_uiTimer = new QTimer(this);
     connect(m_uiTimer, &QTimer::timeout, this, &MainWindow::onWatchdogTick);
@@ -202,7 +223,7 @@ void BaseGaugeWidget::paintEvent(QPaintEvent *event)
         staleFont.setPointSize(12);
         staleFont.setBold(true);
         p.setFont(staleFont);
-        p.setPen(Qt::gray);
+        p.setPen(Theme::textDim);
         p.drawText(QRect(widgetLeft, widgetTop, widgetWidth, widgetHeight), Qt::AlignCenter, "NO DATA");
     }
 }
@@ -223,13 +244,13 @@ void AltimeterWidget::setAltitude(float alt)
 void AltimeterWidget::drawGauge(QPainter &p)
 {
     // Изображение подложки циферблата
-    p.setPen(QPen(Qt::white, 2));
-    p.setBrush(Qt::black);
+    p.setPen(QPen(Theme::outline, 2));
+    p.setBrush(Theme::gaugeFace);
     p.drawEllipse(widgetLeft, widgetTop, widgetWidth, widgetHeight);
 
     // Изображение текста (ALT)
-    p.setPen(Qt::white);
-    p.setFont(QFont("monospace", 10));
+    p.setPen(Theme::textPrimary);
+    p.setFont(Theme::fixedFont(9));
     p.drawText(-30, -70, "ALT");
 
     // Изображение шкалы циферблата
@@ -252,12 +273,12 @@ void AltimeterWidget::drawGauge(QPainter &p)
     float clamped = std::clamp(m_altitude, 0.0f, 200.0f);
     float needleAngle = -135.0f + (clamped / 200.0f) * 270.0f;
     float needleRad = needleAngle * PI / 180.0f;
-    p.setPen(QPen(Qt::red, 3));
+    p.setPen(QPen(Theme::needle, 3));
     p.drawLine(0, 0, static_cast<int>(70 * std::cos(needleRad)), static_cast<int>(70 * std::sin(needleRad)));
 
     // Изображение единицы измерения шкалы высоты
-    p.setPen(Qt::white);
-    p.setFont(QFont("monospace", 12, QFont::Bold));
+    p.setPen(Theme::textPrimary);
+    p.setFont(Theme::fixedFont(11, true));
     p.drawText(-25, 10, QString::number(static_cast<int>(m_altitude)) + "m");
 }
 
@@ -277,13 +298,13 @@ void SpeedometerWidget::setSpeed(float speed)
 void SpeedometerWidget::drawGauge(QPainter &p)
 {
     // Изображение подложки циферблата
-    p.setPen(QPen(Qt::white, 2));
-    p.setBrush(Qt::black);
+    p.setPen(QPen(Theme::outline, 2));
+    p.setBrush(Theme::gaugeFace);
     p.drawEllipse(widgetLeft, widgetTop, widgetWidth, widgetHeight);
 
     // Изображение текста (SPD)
-    p.setPen(Qt::white);
-    p.setFont(QFont("monospace", 10));
+    p.setPen(Theme::textPrimary);
+    p.setFont(Theme::fixedFont(9));
     p.drawText(-30, -70, "SPD");
 
     // Отрисовка шкалы циферблата
@@ -305,12 +326,12 @@ void SpeedometerWidget::drawGauge(QPainter &p)
     float clamped = std::clamp(m_speed, 0.0f, 60.0f);
     float needleAngle = -120.0f + (clamped / 60.0f) * 240.0f;
     float needleRad = needleAngle * PI / 180.0f;
-    p.setPen(QPen(Qt::red, 3));
+    p.setPen(QPen(Theme::needle, 3));
     p.drawLine(0, 0, static_cast<int>(70 * std::cos(needleRad)), static_cast<int>(70 * std::sin(needleRad)));
 
     // Изображение текста единицы измерения скорости
-    p.setPen(Qt::white);
-    p.setFont(QFont("monospace", 12, QFont::Bold));
+    p.setPen(Theme::textPrimary);
+    p.setFont(Theme::fixedFont(11, true));
     p.drawText(-25, 10, QString::number(static_cast<int>(m_speed)) + "m/s");
 }
 
@@ -341,7 +362,7 @@ void AttitudeWidget::drawGauge(QPainter &p)
     int pitchOffset = static_cast<int>(m_pitch * 2.0f);
 
     // Небо
-    p.setBrush(QColor(80, 130, 200));
+    p.setBrush(Theme::sky);
     p.setPen(Qt::NoPen);
     QPolygon sky;
     // Домножение на 2 нужно чтобы не образовывались пустоты при повороте
@@ -350,7 +371,7 @@ void AttitudeWidget::drawGauge(QPainter &p)
     p.drawPolygon(sky);
 
     // Земля
-    p.setBrush(QColor(139, 90, 43));
+    p.setBrush(Theme::ground);
     QPolygon ground;
     // Домножение на 2 нужно чтобы не образовывались пустоты при повороте
     ground << QPoint(widgetLeft * 2, pitchOffset) << QPoint(widgetRight * 2, pitchOffset) << QPoint(widgetRight * 2, widgetBottom * 2)
@@ -358,7 +379,7 @@ void AttitudeWidget::drawGauge(QPainter &p)
     p.drawPolygon(ground);
 
     // Линия горизонта
-    p.setPen(QPen(Qt::white, 2));
+    p.setPen(QPen(Theme::textPrimary, 2));
     // Домножение на 2 нужно чтобы не образовывались обрывы горизонта при повороте
     p.drawLine(widgetLeft * 2, pitchOffset, widgetRight * 2, pitchOffset);
 
@@ -366,7 +387,7 @@ void AttitudeWidget::drawGauge(QPainter &p)
 
     // Отрисовка статической части
     p.setClipping(false);
-    p.setPen(QPen(Qt::white, 2));
+    p.setPen(QPen(Theme::textPrimary, 2));
     p.setBrush(Qt::NoBrush);
 
     // Отрисовка внешней рамки
@@ -394,11 +415,11 @@ void CompassWidget::setYaw(float yaw)
 void CompassWidget::drawGauge(QPainter &p)
 {
     // Изображение подложки циферблата
-    p.setPen(QPen(Qt::white, 2));
-    p.setBrush(Qt::black);
+    p.setPen(QPen(Theme::outline, 2));
+    p.setBrush(Theme::gaugeFace);
     p.drawEllipse(widgetLeft, widgetTop, widgetWidth, widgetHeight);
 
-    p.setFont(QFont("monospace", 9));
+    p.setFont(Theme::fixedFont(8));
     for (int i = 0; i < 360; i += 30) {
         float rad = (i - 90.0f) * PI / 180.0f;
         int rOuter = 85;
@@ -432,10 +453,10 @@ void CompassWidget::drawGauge(QPainter &p)
     }
 
     float needleRad = (m_yaw - 90.0f) * PI / 180.0f;
-    p.setPen(QPen(Qt::red, 3));
+    p.setPen(QPen(Theme::needle, 3));
     p.drawLine(0, 0, static_cast<int>(70 * std::cos(needleRad)), static_cast<int>(70 * std::sin(needleRad)));
 
-    p.setPen(Qt::white);
-    p.setFont(QFont("monospace", 10, QFont::Bold));
+    p.setPen(Theme::textPrimary);
+    p.setFont(Theme::fixedFont(9, true));
     p.drawText(-15, 10, QString::number(static_cast<int>(m_yaw)) + QChar(0xB0));
 }
