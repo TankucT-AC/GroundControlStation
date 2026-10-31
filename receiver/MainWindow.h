@@ -30,6 +30,7 @@ private slots:
 
 private:
     void updateStatusLabel();
+    void togglePaused();
 
 private:
     enum class LinkState {
@@ -39,6 +40,7 @@ private:
     };
     LinkState m_linkState = LinkState::NoData;
     qint64 m_lastPacketMs = 0;
+    bool m_paused = false;
 
 private:
     AltimeterWidget *m_altimeter;

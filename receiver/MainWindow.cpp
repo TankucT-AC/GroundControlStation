@@ -9,6 +9,7 @@
 #include <QMessageBox>
 #include <QPainter>
 #include <QPen>
+#include <QShortcut>
 #include <QVBoxLayout>
 #include <cmath>
 #include <qwidget.h>
@@ -101,10 +102,15 @@ MainWindow::MainWindow(QWidget *parent)
     m_uiTimer = new QTimer(this);
     connect(m_uiTimer, &QTimer::timeout, this, &MainWindow::onWatchdogTick);
     m_uiTimer->start(1000);
+
+    // Пауза отображения: данные принимаются, приборы заморожены
+    auto *pauseShortcut = new QShortcut(QKeySequence(Qt::Key_Space), this);
+    connect(pauseShortcut, &QShortcut::activated, this, &MainWindow::togglePaused);
 }
 
 void MainWindow::onTelemetryReceived(const TelemetryPacket &pkt)
 {
+    // Состояние линии живёт всегда, даже на паузе
     m_linkState = LinkState::Live;
     m_lastPacketMs = QDateTime::currentMSecsSinceEpoch();
     m_altimeter->setStale(false);
@@ -112,6 +118,10 @@ void MainWindow::onTelemetryReceived(const TelemetryPacket &pkt)
     m_attitude->setStale(false);
     m_compass->setStale(false);
     updateStatusLabel();
+
+    // Пауза замораживает отображаемые значения, но не приём
+    if (m_paused)
+        return;
 
     m_altimeter->setAltitude(pkt.altitude);
     m_speedometer->setSpeed(pkt.speed);
@@ -170,27 +180,38 @@ void MainWindow::onWatchdogTick()
         m_compass->setStale(true);
         updateStatusLabel();
     }
-    if (m_linkState == LinkState::Lost)
+    if (m_linkState == LinkState::Lost && !m_paused)
         m_timestampLabel->setText(QString("Last packet %1 s ago").arg(ageMs / 1000));
+}
+
+void MainWindow::togglePaused()
+{
+    m_paused = !m_paused;
+    updateStatusLabel();
 }
 
 void MainWindow::updateStatusLabel()
 {
     QString text;
     QColor color;
-    switch (m_linkState) {
-    case LinkState::NoData:
-        text = "NO DATA";
-        color = Qt::gray;
-        break;
-    case LinkState::Live:
-        text = "LIVE";
-        color = Qt::green;
-        break;
-    case LinkState::Lost:
-        text = "LINK LOST";
-        color = Qt::red;
-        break;
+    if (m_paused) {
+        text = "PAUSED";
+        color = Theme::warn;
+    } else {
+        switch (m_linkState) {
+        case LinkState::NoData:
+            text = "NO DATA";
+            color = Theme::textDim;
+            break;
+        case LinkState::Live:
+            text = "LIVE";
+            color = Theme::ok;
+            break;
+        case LinkState::Lost:
+            text = "LINK LOST";
+            color = Theme::crit;
+            break;
+        }
     }
     m_statusLabel->setText(text);
     QPalette pal = m_statusLabel->palette();
