@@ -36,13 +36,13 @@ private:
     QTimer *m_uiTimer;
 };
 
-// ---------- BaseGaudgeWidget ----------
+// ---------- BaseGaugeWidget ----------
 
-class BaseGaudgeWidget : public QWidget
+class BaseGaugeWidget : public QWidget
 {
     Q_OBJECT
 public:
-    explicit BaseGaudgeWidget(QWidget *parent = nullptr);
+    explicit BaseGaugeWidget(QWidget *parent = nullptr);
 
 protected:
     // Эти константы задают виртуальные координаты для работы с виджетами
@@ -59,11 +59,11 @@ protected:
 
     void paintEvent(QPaintEvent *event) override;
 
-    virtual void drawGaudge(QPainter &p) = 0;
+    virtual void drawGauge(QPainter &p) = 0;
 };
 
 // ---------- Altimeter ----------
-class AltimeterWidget : public BaseGaudgeWidget
+class AltimeterWidget : public BaseGaugeWidget
 {
     Q_OBJECT
 public:
@@ -71,14 +71,14 @@ public:
     void setAltitude(float alt);
 
 protected:
-    void drawGaudge(QPainter &p) override;
+    void drawGauge(QPainter &p) override;
 
 private:
     float m_altitude = 0.0f;
 };
 
 // ---------- Speedometer ----------
-class SpeedometerWidget : public BaseGaudgeWidget
+class SpeedometerWidget : public BaseGaugeWidget
 {
     Q_OBJECT
 public:
@@ -86,14 +86,14 @@ public:
     void setSpeed(float speed);
 
 protected:
-    void drawGaudge(QPainter &p) override;
+    void drawGauge(QPainter &p) override;
 
 private:
     float m_speed = 0.0f;
 };
 
 // ---------- Attitude (pitch/roll) ----------
-class AttitudeWidget : public BaseGaudgeWidget
+class AttitudeWidget : public BaseGaugeWidget
 {
     Q_OBJECT
 public:
@@ -101,7 +101,7 @@ public:
     void setPitchRoll(float pitch, float roll);
 
 protected:
-    void drawGaudge(QPainter &p) override;
+    void drawGauge(QPainter &p) override;
 
 private:
     float m_pitch = 0.0f;
@@ -109,7 +109,7 @@ private:
 };
 
 // ---------- Compass (yaw) ----------
-class CompassWidget : public BaseGaudgeWidget
+class CompassWidget : public BaseGaugeWidget
 {
     Q_OBJECT
 public:
@@ -117,7 +117,7 @@ public:
     void setYaw(float yaw);
 
 protected:
-    void drawGaudge(QPainter &p) override;
+    void drawGauge(QPainter &p) override;
 
 private:
     float m_yaw = 0.0f;

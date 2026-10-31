@@ -90,14 +90,14 @@ void MainWindow::onTelemetryReceived(const TelemetryPacket &pkt)
     m_timestampLabel->setText("Last: " + dt.toString("hh:mm:ss.zzz"));
 }
 
-// ========================== BaseGaudgeWidget ============================
+// ========================== BaseGaugeWidget ============================
 
-BaseGaudgeWidget::BaseGaudgeWidget(QWidget *parent)
+BaseGaugeWidget::BaseGaugeWidget(QWidget *parent)
     : QWidget(parent)
 {
 }
 
-void BaseGaudgeWidget::paintEvent(QPaintEvent *event)
+void BaseGaugeWidget::paintEvent(QPaintEvent *event)
 {
     // Инициализация инструмента рисования в виджете
     QPainter p(this);
@@ -110,13 +110,13 @@ void BaseGaudgeWidget::paintEvent(QPaintEvent *event)
     // Связывание виртуальных координат с рисовалкой
     p.setWindow(widgetLeft, widgetTop, widgetWidth, widgetHeight);
 
-    drawGaudge(p);
+    drawGauge(p);
 }
 
 // ============================== AltimeterWidget ==============================
 
 AltimeterWidget::AltimeterWidget(QWidget *parent)
-    : BaseGaudgeWidget(parent)
+    : BaseGaugeWidget(parent)
 {
 }
 
@@ -126,7 +126,7 @@ void AltimeterWidget::setAltitude(float alt)
     update();
 }
 
-void AltimeterWidget::drawGaudge(QPainter &p)
+void AltimeterWidget::drawGauge(QPainter &p)
 {
     // Изображение подложки циферблата
     p.setPen(QPen(Qt::white, 2));
@@ -170,7 +170,7 @@ void AltimeterWidget::drawGaudge(QPainter &p)
 // =============== SpeedometerWidget =================
 
 SpeedometerWidget::SpeedometerWidget(QWidget *parent)
-    : BaseGaudgeWidget(parent)
+    : BaseGaugeWidget(parent)
 {
 }
 
@@ -180,7 +180,7 @@ void SpeedometerWidget::setSpeed(float speed)
     update();
 }
 
-void SpeedometerWidget::drawGaudge(QPainter &p)
+void SpeedometerWidget::drawGauge(QPainter &p)
 {
     // Изображение подложки циферблата
     p.setPen(QPen(Qt::white, 2));
@@ -223,7 +223,7 @@ void SpeedometerWidget::drawGaudge(QPainter &p)
 // ============================== AttitudeWidget ==============================
 
 AttitudeWidget::AttitudeWidget(QWidget *parent)
-    : BaseGaudgeWidget(parent)
+    : BaseGaugeWidget(parent)
 {
 }
 
@@ -234,7 +234,7 @@ void AttitudeWidget::setPitchRoll(float pitch, float roll)
     update();
 }
 
-void AttitudeWidget::drawGaudge(QPainter &p)
+void AttitudeWidget::drawGauge(QPainter &p)
 {
     // Включаем обрезку по рамке
     p.setClipRect(widgetLeft + 2, widgetTop + 2, widgetWidth - 4, widgetHeight - 4);
@@ -287,7 +287,7 @@ void AttitudeWidget::drawGaudge(QPainter &p)
 // ============================== CompassWidget ==============================
 
 CompassWidget::CompassWidget(QWidget *parent)
-    : BaseGaudgeWidget(parent)
+    : BaseGaugeWidget(parent)
 {
 }
 
@@ -297,7 +297,7 @@ void CompassWidget::setYaw(float yaw)
     update();
 }
 
-void CompassWidget::drawGaudge(QPainter &p)
+void CompassWidget::drawGauge(QPainter &p)
 {
     // Изображение подложки циферблата
     p.setPen(QPen(Qt::white, 2));
