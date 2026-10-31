@@ -24,6 +24,17 @@ public slots:
     void onErrorCountChanged(int count);
     void onLinkError(const QString &message);
 
+private slots:
+    void onWatchdogTick();
+
+private:
+    void updateStatusLabel();
+
+private:
+    enum class LinkState { NoData, Live, Lost };
+    LinkState m_linkState = LinkState::NoData;
+    qint64 m_lastPacketMs = 0;
+
 private:
     AltimeterWidget *m_altimeter;
     SpeedometerWidget *m_speedometer;
@@ -35,6 +46,7 @@ private:
     QLabel *m_satLabel;
     QLabel *m_errorLabel;
     QLabel *m_timestampLabel;
+    QLabel *m_statusLabel;
     QTimer *m_uiTimer;
 };
 
@@ -45,6 +57,9 @@ class BaseGaugeWidget : public QWidget
     Q_OBJECT
 public:
     explicit BaseGaugeWidget(QWidget *parent = nullptr);
+
+    // true — прибор «заморожен»: затемнение и надпись NO DATA (нет данных от воркера)
+    void setStale(bool stale);
 
 protected:
     // Эти константы задают виртуальные координаты для работы с виджетами
@@ -62,6 +77,9 @@ protected:
     void paintEvent(QPaintEvent *event) override;
 
     virtual void drawGauge(QPainter &p) = 0;
+
+private:
+    bool m_stale = false;
 };
 
 // ---------- Altimeter ----------

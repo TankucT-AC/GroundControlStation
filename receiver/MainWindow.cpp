@@ -13,6 +13,7 @@
 #include <qwidget.h>
 
 static constexpr float PI = 3.14159265358979323846f;
+static constexpr qint64 kLinkTimeoutMs = 2000;
 
 // ============================== MainWindow ==============================
 
@@ -51,6 +52,12 @@ MainWindow::MainWindow(QWidget *parent)
     m_timestampLabel = new QLabel("Waiting for data...", this);
     m_timestampLabel->setStyleSheet("font-size: 12px; padding: 4px;");
 
+    m_statusLabel = new QLabel("NO DATA", this);
+    QFont statusFont = m_statusLabel->font();
+    statusFont.setBold(true);
+    m_statusLabel->setFont(statusFont);
+    updateStatusLabel();
+
     auto *topLayout = new QHBoxLayout;
     topLayout->addWidget(m_altimeter);
     topLayout->addWidget(m_speedometer);
@@ -63,6 +70,7 @@ MainWindow::MainWindow(QWidget *parent)
     infoLayout->addWidget(m_batteryBar, 0, 2);
     infoLayout->addWidget(m_satLabel, 1, 0);
     infoLayout->addWidget(m_errorLabel, 1, 1);
+    infoLayout->addWidget(m_statusLabel, 1, 2);
     infoLayout->addWidget(m_timestampLabel, 2, 0, 1, 3);
 
     auto *mainLayout = new QVBoxLayout(this);
@@ -70,11 +78,20 @@ MainWindow::MainWindow(QWidget *parent)
     mainLayout->addLayout(infoLayout);
 
     m_uiTimer = new QTimer(this);
+    connect(m_uiTimer, &QTimer::timeout, this, &MainWindow::onWatchdogTick);
     m_uiTimer->start(1000);
 }
 
 void MainWindow::onTelemetryReceived(const TelemetryPacket &pkt)
 {
+    m_linkState = LinkState::Live;
+    m_lastPacketMs = QDateTime::currentMSecsSinceEpoch();
+    m_altimeter->setStale(false);
+    m_speedometer->setStale(false);
+    m_attitude->setStale(false);
+    m_compass->setStale(false);
+    updateStatusLabel();
+
     m_altimeter->setAltitude(pkt.altitude);
     m_speedometer->setSpeed(pkt.speed);
     m_attitude->setPitchRoll(pkt.pitch, pkt.roll);
@@ -103,11 +120,61 @@ void MainWindow::onLinkError(const QString &message)
     qApp->exit(1);
 }
 
+void MainWindow::onWatchdogTick()
+{
+    if (m_lastPacketMs <= 0)
+        return;
+
+    const qint64 ageMs = QDateTime::currentMSecsSinceEpoch() - m_lastPacketMs;
+    if (ageMs > kLinkTimeoutMs && m_linkState == LinkState::Live) {
+        m_linkState = LinkState::Lost;
+        m_altimeter->setStale(true);
+        m_speedometer->setStale(true);
+        m_attitude->setStale(true);
+        m_compass->setStale(true);
+        updateStatusLabel();
+    }
+    if (m_linkState == LinkState::Lost)
+        m_timestampLabel->setText(QString("Last packet %1 s ago").arg(ageMs / 1000));
+}
+
+void MainWindow::updateStatusLabel()
+{
+    QString text;
+    QColor color;
+    switch (m_linkState) {
+    case LinkState::NoData:
+        text = "NO DATA";
+        color = Qt::gray;
+        break;
+    case LinkState::Live:
+        text = "LIVE";
+        color = Qt::green;
+        break;
+    case LinkState::Lost:
+        text = "LINK LOST";
+        color = Qt::red;
+        break;
+    }
+    m_statusLabel->setText(text);
+    QPalette pal = m_statusLabel->palette();
+    pal.setColor(QPalette::WindowText, color);
+    m_statusLabel->setPalette(pal);
+}
+
 // ========================== BaseGaugeWidget ============================
 
 BaseGaugeWidget::BaseGaugeWidget(QWidget *parent)
     : QWidget(parent)
 {
+}
+
+void BaseGaugeWidget::setStale(bool stale)
+{
+    if (m_stale == stale)
+        return;
+    m_stale = stale;
+    update();
 }
 
 void BaseGaugeWidget::paintEvent(QPaintEvent *event)
@@ -124,6 +191,20 @@ void BaseGaugeWidget::paintEvent(QPaintEvent *event)
     p.setWindow(widgetLeft, widgetTop, widgetWidth, widgetHeight);
 
     drawGauge(p);
+
+    // Оверлей потери данных поверх прибора
+    if (m_stale) {
+        p.setClipping(false);
+        p.setPen(Qt::NoPen);
+        p.setBrush(QColor(0, 0, 0, 170));
+        p.drawRect(widgetLeft, widgetTop, widgetWidth, widgetHeight);
+        QFont staleFont = p.font();
+        staleFont.setPointSize(12);
+        staleFont.setBold(true);
+        p.setFont(staleFont);
+        p.setPen(Qt::gray);
+        p.drawText(QRect(widgetLeft, widgetTop, widgetWidth, widgetHeight), Qt::AlignCenter, "NO DATA");
+    }
 }
 
 // ============================== AltimeterWidget ==============================
