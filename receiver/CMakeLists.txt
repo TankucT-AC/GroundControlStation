@@ -4,6 +4,8 @@ add_executable(receiver
     MainWindow.cpp
     UdpWorker.h
     UdpWorker.cpp
+    HistoryChart.h
+    HistoryChart.cpp
 )
 
 target_link_libraries(receiver PRIVATE common 

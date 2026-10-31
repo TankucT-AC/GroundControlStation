@@ -15,6 +15,7 @@ class AltimeterWidget;
 class SpeedometerWidget;
 class AttitudeWidget;
 class CompassWidget;
+class HistoryChart;
 class QCheckBox;
 
 class MainWindow : public QWidget
@@ -58,6 +59,8 @@ private:
     SpeedometerWidget *m_speedometer;
     AttitudeWidget *m_attitude;
     CompassWidget *m_compass;
+    HistoryChart *m_altChart;
+    HistoryChart *m_speedChart;
     QLabel *m_gpsLabel;
     QLabel *m_batteryLabel;
     QProgressBar *m_batteryBar;

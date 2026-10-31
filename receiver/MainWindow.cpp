@@ -1,4 +1,5 @@
 #include "MainWindow.h"
+#include "HistoryChart.h"
 #include "Theme.h"
 #include <QApplication>
 #include <QCheckBox>
@@ -39,6 +40,10 @@ MainWindow::MainWindow(QWidget *parent)
         gauge->setMinimumSize(200, 200);
         gauge->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     }
+
+    // Графики истории за последнюю минуту
+    m_altChart = new HistoryChart("Altitude", "m", this);
+    m_speedChart = new HistoryChart("Speed", "m/s", this);
 
     // Типографика: значения — 11 pt моно, подписи — 9 pt
     QFont valueFont = QFontDatabase::systemFont(QFontDatabase::FixedFont);
@@ -114,6 +119,11 @@ MainWindow::MainWindow(QWidget *parent)
     mainLayout->addLayout(topLayout, 3);
     mainLayout->addLayout(infoRow, 1);
 
+    auto *chartsRow = new QHBoxLayout;
+    chartsRow->addWidget(m_altChart, 1);
+    chartsRow->addWidget(m_speedChart, 1);
+    mainLayout->addLayout(chartsRow, 1);
+
     m_uiTimer = new QTimer(this);
     connect(m_uiTimer, &QTimer::timeout, this, &MainWindow::onWatchdogTick);
     m_uiTimer->start(1000);
@@ -151,11 +161,14 @@ void MainWindow::onTelemetryReceived(const TelemetryPacket &pkt)
 
     // Журнал CSV: числа в C-локали (точка), вне зависимости от локали интерфейса
     if (m_csvFile.isOpen()) {
-        m_csvStream << QDateTime::currentDateTime().toString(Qt::ISODateWithMs) << ',' << pkt.timestamp << ',' << QString::number(pkt.altitude, 'f', 2)
-                    << ',' << QString::number(pkt.speed, 'f', 2) << ',' << QString::number(pkt.pitch, 'f', 2) << ',' << QString::number(pkt.roll, 'f', 2)
-                    << ',' << QString::number(pkt.yaw, 'f', 2) << ',' << QString::number(pkt.latitude, 'f', 6) << ',' << QString::number(pkt.longitude, 'f', 6)
-                    << ',' << pkt.battery << ',' << pkt.satellites << '\n';
+        m_csvStream << QDateTime::currentDateTime().toString(Qt::ISODateWithMs) << ',' << pkt.timestamp << ',' << QString::number(pkt.altitude, 'f', 2) << ','
+                    << QString::number(pkt.speed, 'f', 2) << ',' << QString::number(pkt.pitch, 'f', 2) << ',' << QString::number(pkt.roll, 'f', 2) << ','
+                    << QString::number(pkt.yaw, 'f', 2) << ',' << QString::number(pkt.latitude, 'f', 6) << ',' << QString::number(pkt.longitude, 'f', 6) << ','
+                    << pkt.battery << ',' << pkt.satellites << '\n';
     }
+
+    m_altChart->appendSample(pkt.altitude);
+    m_speedChart->appendSample(pkt.speed);
 
     m_altimeter->setAltitude(pkt.altitude);
     m_speedometer->setSpeed(pkt.speed);
@@ -241,16 +254,11 @@ void MainWindow::updateStats()
     const double errPercent = totalDatagrams > 0 ? 100.0 * m_totalErrors / totalDatagrams : 0.0;
 
     const qint64 upSec = m_sessionTimer.elapsed() / 1000;
-    const QString uptime = QString("%1:%2:%3")
-                               .arg(upSec / 3600, 2, 10, QChar('0'))
-                               .arg((upSec / 60) % 60, 2, 10, QChar('0'))
-                               .arg(upSec % 60, 2, 10, QChar('0'));
+    const QString uptime =
+        QString("%1:%2:%3").arg(upSec / 3600, 2, 10, QChar('0')).arg((upSec / 60) % 60, 2, 10, QChar('0')).arg(upSec % 60, 2, 10, QChar('0'));
 
-    m_statsLabel->setText(QString("RX %1 pkt/s | Errors %2 (%3%) | Uptime %4")
-                              .arg(pktPerSec, 0, 'f', 1)
-                              .arg(m_totalErrors)
-                              .arg(errPercent, 0, 'f', 1)
-                              .arg(uptime));
+    m_statsLabel->setText(
+        QString("RX %1 pkt/s | Errors %2 (%3%) | Uptime %4").arg(pktPerSec, 0, 'f', 1).arg(m_totalErrors).arg(errPercent, 0, 'f', 1).arg(uptime));
 }
 
 void MainWindow::togglePaused()
