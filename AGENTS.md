@@ -17,9 +17,11 @@ ctest --test-dir out/gcc-debug/tests        # from tests/, NOT build root
 ## Run
 
 ```sh
-./out/gcc-debug/receiver/receiver                     # binds UDP 12345 (hardcoded in receiver/main.cpp)
+./out/gcc-debug/receiver/receiver -p 12345   # -p/--port: UDP listen port (default 12345)
 ./out/gcc-debug/sender/sender -p 12345 -a 127.0.0.1 -r 50
 ```
+
+GUI controls: Space pauses the display (data keeps flowing). CSV toggle lives in the Link group.
 
 ## Protocol
 
@@ -28,8 +30,10 @@ Single source of truth is `common/TelemetryPacket.h` (constexpr offsets/sizes, `
 ## Conventions & gotchas
 
 - `CMAKE_AUTOMOC` is ON: any file containing `Q_OBJECT` must be listed in its target's `CMakeLists.txt`.
+- All UI colors go through semantic roles in `receiver/Theme.h` (`Theme::crit`, `Theme::gaugeFace`, `Theme::batteryState()`...) — don't hardcode QColor values in widgets.
 - Format via `.clang-format` (WebKit base, 4-space indent, **160-col limit**, Linux braces, `Type *var`) — don't re-wrap code to 80/100 columns by hand.
 - `.clangd` reads `out/gcc-debug/compile_commands.json`; configure the gcc-debug preset or LSP diagnostics go stale.
-- Threading: `UdpWorker` runs on its own `QThread` and only emits `dataReceived(TelemetryPacket)` (by value). UI is touched exclusively from `MainWindow` slots on the GUI thread.
-- Gauge widgets derive from `BaseGaugeWidget` in `receiver/MainWindow.h`; painting uses a virtual −100..100 coordinate space.
+- Threading: `UdpWorker` runs on its own `QThread` and communicates only via signals (`dataReceived`, `errorOccurred`, `errorCountChanged`). UI is touched exclusively from `MainWindow` slots on the GUI thread.
+- Tests live one per target in `tests/`; `test_udpworker` compiles `../receiver/UdpWorker.cpp` directly and needs the `../receiver` include path (see `tests/CMakeLists.txt`).
+- Gauge widgets derive from `BaseGaugeWidget` in `receiver/MainWindow.h`; painting uses a virtual −100..100 coordinate space. History charts are a separate `HistoryChart` class using pixel coordinates.
 - README and comments are Russian; commits on `main` use conventional prefixes (`refactor:`, `feat:`).
