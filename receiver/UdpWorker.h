@@ -12,6 +12,9 @@ public:
     explicit UdpWorker(quint16 port, QObject *parent = nullptr);
     ~UdpWorker() override;
 
+    // Фактически занятый порт (0 при bind(0) — порт выделяет ОС)
+    quint16 boundPort() const;
+
 public slots:
     void start();
     void stop();
@@ -19,6 +22,7 @@ public slots:
 signals:
     void dataReceived(TelemetryPacket pkt);
     void errorOccurred(const QString &message);
+    void errorCountChanged(int count);
 
 private slots:
     void onReadyRead();

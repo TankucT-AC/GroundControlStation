@@ -21,6 +21,8 @@ public:
 
 public slots:
     void onTelemetryReceived(const TelemetryPacket &pkt);
+    void onErrorCountChanged(int count);
+    void onLinkError(const QString &message);
 
 private:
     AltimeterWidget *m_altimeter;

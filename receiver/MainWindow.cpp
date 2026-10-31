@@ -1,9 +1,11 @@
 #include "MainWindow.h"
+#include <QApplication>
 #include <QDateTime>
 #include <QFont>
 #include <QGridLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
+#include <QMessageBox>
 #include <QPainter>
 #include <QPen>
 #include <QVBoxLayout>
@@ -88,6 +90,17 @@ void MainWindow::onTelemetryReceived(const TelemetryPacket &pkt)
     QDateTime dt;
     dt.setMSecsSinceEpoch(static_cast<qint64>(pkt.timestamp));
     m_timestampLabel->setText("Last: " + dt.toString("hh:mm:ss.zzz"));
+}
+
+void MainWindow::onErrorCountChanged(int count)
+{
+    m_errorLabel->setText(QString("Errors: %1").arg(count));
+}
+
+void MainWindow::onLinkError(const QString &message)
+{
+    QMessageBox::critical(this, "UAV Telemetry Receiver", message);
+    qApp->exit(1);
 }
 
 // ========================== BaseGaugeWidget ============================

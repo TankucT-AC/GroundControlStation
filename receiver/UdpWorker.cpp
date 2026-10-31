@@ -13,6 +13,11 @@ UdpWorker::~UdpWorker()
     stop();
 }
 
+quint16 UdpWorker::boundPort() const
+{
+    return m_socket ? m_socket->localPort() : 0;
+}
+
 void UdpWorker::start()
 {
     m_socket = new QUdpSocket(this);
@@ -48,6 +53,7 @@ void UdpWorker::onReadyRead()
             emit dataReceived(pkt.value());
         } else {
             ++m_errorCount;
+            emit errorCountChanged(m_errorCount);
             qWarning() << "Bad packet from" << sender.toString() << "errors:" << m_errorCount;
         }
     }

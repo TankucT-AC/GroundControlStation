@@ -21,6 +21,8 @@ int main(int argc, char *argv[])
     QObject::connect(workerThread, &QThread::started, worker, &UdpWorker::start);
     QObject::connect(workerThread, &QThread::finished, worker, &QObject::deleteLater);
     QObject::connect(worker, &UdpWorker::dataReceived, &window, &MainWindow::onTelemetryReceived);
+    QObject::connect(worker, &UdpWorker::errorOccurred, &window, &MainWindow::onLinkError);
+    QObject::connect(worker, &UdpWorker::errorCountChanged, &window, &MainWindow::onErrorCountChanged);
 
     workerThread->start();
 
