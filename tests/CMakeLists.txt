@@ -14,3 +14,9 @@ target_link_libraries(test_udpworker PRIVATE common Qt6::Test Qt6::Network Qt6::
 target_include_directories(test_udpworker PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../receiver)
 
 add_test(NAME test_udpworker COMMAND test_udpworker)
+
+add_executable(test_theme test_theme.cpp)
+target_link_libraries(test_theme PRIVATE Qt6::Test Qt6::Gui)
+target_include_directories(test_theme PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../receiver)
+
+add_test(NAME test_theme COMMAND test_theme)

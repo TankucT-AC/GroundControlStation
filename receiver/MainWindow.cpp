@@ -121,7 +121,22 @@ void MainWindow::onTelemetryReceived(const TelemetryPacket &pkt)
     m_gpsLabel->setText(QString("Lat: %1\nLon: %2").arg(pkt.latitude, 0, 'f', 6).arg(pkt.longitude, 0, 'f', 6));
 
     m_batteryBar->setValue(pkt.battery);
-    m_batteryLabel->setText(QString("Battery: %1%").arg(pkt.battery));
+
+    // Состояние батареи: цвет заливки + текст, не только цвет
+    QColor chunkColor = Theme::ok;
+    QString suffix;
+    const Theme::BatteryState state = Theme::batteryState(pkt.battery);
+    if (state == Theme::BatteryState::Critical) {
+        chunkColor = Theme::crit;
+        suffix = "  CRIT";
+    } else if (state == Theme::BatteryState::Low) {
+        chunkColor = Theme::warn;
+        suffix = "  LOW";
+    }
+    QPalette barPalette = m_batteryBar->palette();
+    barPalette.setColor(QPalette::Highlight, chunkColor);
+    m_batteryBar->setPalette(barPalette);
+    m_batteryLabel->setText(QString("Battery: %1%%2").arg(pkt.battery).arg(suffix));
 
     m_satLabel->setText(QString("Satellites: %1").arg(pkt.satellites));
 
@@ -188,6 +203,21 @@ void MainWindow::updateStatusLabel()
 BaseGaugeWidget::BaseGaugeWidget(QWidget *parent)
     : QWidget(parent)
 {
+    m_frameTimer.start();
+}
+
+float BaseGaugeWidget::stepTowards(float current, float target, float tau)
+{
+    const float k = 1.0f - std::exp(-m_dt / tau);
+    const float next = current + (target - current) * k;
+    if (std::abs(target - next) > 0.05f)
+        m_animating = true;
+    return next;
+}
+
+float BaseGaugeWidget::stepTowardsAngle(float current, float target, float tau)
+{
+    return stepTowards(current, current + std::remainder(target - current, 360.0f), tau);
 }
 
 void BaseGaugeWidget::setStale(bool stale)
@@ -204,6 +234,10 @@ void BaseGaugeWidget::paintEvent(QPaintEvent *event)
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing);
 
+    // Время с прошлого кадра для демпфирования стрелок (ограничено 100 мс)
+    m_dt = std::clamp(m_frameTimer.restart() / 1000.0f, 0.0f, 0.1f);
+    m_animating = false;
+
     // Выделение на физическом экране квадрата
     int side = qMin(width(), height());
     p.setViewport((width() - side) / 2, (height() - side) / 2, side, side);
@@ -219,13 +253,14 @@ void BaseGaugeWidget::paintEvent(QPaintEvent *event)
         p.setPen(Qt::NoPen);
         p.setBrush(QColor(0, 0, 0, 170));
         p.drawRect(widgetLeft, widgetTop, widgetWidth, widgetHeight);
-        QFont staleFont = p.font();
-        staleFont.setPointSize(12);
-        staleFont.setBold(true);
-        p.setFont(staleFont);
+        p.setFont(Theme::fixedFont(11, true));
         p.setPen(Theme::textDim);
         p.drawText(QRect(widgetLeft, widgetTop, widgetWidth, widgetHeight), Qt::AlignCenter, "NO DATA");
     }
+
+    // Стрелка ещё не дошла до цели — просим следующий кадр
+    if (m_animating)
+        update();
 }
 
 // ============================== AltimeterWidget ==============================
@@ -243,6 +278,9 @@ void AltimeterWidget::setAltitude(float alt)
 
 void AltimeterWidget::drawGauge(QPainter &p)
 {
+    // Демпфированное отображаемое значение
+    m_altitudeShown = stepTowards(m_altitudeShown, m_altitude, 0.15f);
+
     // Изображение подложки циферблата
     p.setPen(QPen(Theme::outline, 2));
     p.setBrush(Theme::gaugeFace);
@@ -266,11 +304,21 @@ void AltimeterWidget::drawGauge(QPainter &p)
         int y1 = static_cast<int>(rOuter * std::sin(rad));
         int x2 = static_cast<int>(rInner * std::cos(rad));
         int y2 = static_cast<int>(rInner * std::sin(rad));
+        p.setPen(Theme::textPrimary);
         p.drawLine(x1, y1, x2, y2);
+
+        // Цифровая метка на каждом пятом штрихе (0, 50, 100, 150, 200)
+        if (i % 5 == 0) {
+            int lx = static_cast<int>(63 * std::cos(rad));
+            int ly = static_cast<int>(63 * std::sin(rad));
+            p.setPen(Theme::textDim);
+            p.setFont(Theme::fixedFont(7));
+            p.drawText(QRect(lx - 12, ly - 7, 24, 14), Qt::AlignCenter, QString::number(static_cast<int>(altVal)));
+        }
     }
 
     // Расчет положения и изображение стрелки циферблата
-    float clamped = std::clamp(m_altitude, 0.0f, 200.0f);
+    float clamped = std::clamp(m_altitudeShown, 0.0f, 200.0f);
     float needleAngle = -135.0f + (clamped / 200.0f) * 270.0f;
     float needleRad = needleAngle * PI / 180.0f;
     p.setPen(QPen(Theme::needle, 3));
@@ -279,7 +327,7 @@ void AltimeterWidget::drawGauge(QPainter &p)
     // Изображение единицы измерения шкалы высоты
     p.setPen(Theme::textPrimary);
     p.setFont(Theme::fixedFont(11, true));
-    p.drawText(-25, 10, QString::number(static_cast<int>(m_altitude)) + "m");
+    p.drawText(-25, 10, QString::number(static_cast<int>(m_altitudeShown)) + "m");
 }
 
 // =============== SpeedometerWidget =================
@@ -297,6 +345,9 @@ void SpeedometerWidget::setSpeed(float speed)
 
 void SpeedometerWidget::drawGauge(QPainter &p)
 {
+    // Демпфированное отображаемое значение
+    m_speedShown = stepTowards(m_speedShown, m_speed, 0.15f);
+
     // Изображение подложки циферблата
     p.setPen(QPen(Theme::outline, 2));
     p.setBrush(Theme::gaugeFace);
@@ -319,11 +370,21 @@ void SpeedometerWidget::drawGauge(QPainter &p)
         int y1 = static_cast<int>(rOuter * std::sin(rad));
         int x2 = static_cast<int>(rInner * std::cos(rad));
         int y2 = static_cast<int>(rInner * std::sin(rad));
+        p.setPen(Theme::textPrimary);
         p.drawLine(x1, y1, x2, y2);
+
+        // Цифровая метка на каждом третьем штрихе (0, 15, 30, 45, 60)
+        if (i % 3 == 0) {
+            int lx = static_cast<int>(63 * std::cos(rad));
+            int ly = static_cast<int>(63 * std::sin(rad));
+            p.setPen(Theme::textDim);
+            p.setFont(Theme::fixedFont(7));
+            p.drawText(QRect(lx - 12, ly - 7, 24, 14), Qt::AlignCenter, QString::number(static_cast<int>(spdVal)));
+        }
     }
 
     // Расчет угла и изображение стрелки спидометра
-    float clamped = std::clamp(m_speed, 0.0f, 60.0f);
+    float clamped = std::clamp(m_speedShown, 0.0f, 60.0f);
     float needleAngle = -120.0f + (clamped / 60.0f) * 240.0f;
     float needleRad = needleAngle * PI / 180.0f;
     p.setPen(QPen(Theme::needle, 3));
@@ -332,7 +393,7 @@ void SpeedometerWidget::drawGauge(QPainter &p)
     // Изображение текста единицы измерения скорости
     p.setPen(Theme::textPrimary);
     p.setFont(Theme::fixedFont(11, true));
-    p.drawText(-25, 10, QString::number(static_cast<int>(m_speed)) + "m/s");
+    p.drawText(-25, 10, QString::number(static_cast<int>(m_speedShown)) + "m/s");
 }
 
 // ============================== AttitudeWidget ==============================
@@ -351,15 +412,19 @@ void AttitudeWidget::setPitchRoll(float pitch, float roll)
 
 void AttitudeWidget::drawGauge(QPainter &p)
 {
+    // Демпфированные отображаемые значения
+    m_pitchShown = stepTowards(m_pitchShown, m_pitch, 0.15f);
+    m_rollShown = stepTowards(m_rollShown, m_roll, 0.15f);
+
     // Включаем обрезку по рамке
     p.setClipRect(widgetLeft + 2, widgetTop + 2, widgetWidth - 4, widgetHeight - 4);
 
     // Рисование динамичной части
     p.save();
     p.translate(0, 0);
-    p.rotate(-m_roll);
+    p.rotate(-m_rollShown);
 
-    int pitchOffset = static_cast<int>(m_pitch * 2.0f);
+    int pitchOffset = static_cast<int>(m_pitchShown * 2.0f);
 
     // Небо
     p.setBrush(Theme::sky);
@@ -382,6 +447,23 @@ void AttitudeWidget::drawGauge(QPainter &p)
     p.setPen(QPen(Theme::textPrimary, 2));
     // Домножение на 2 нужно чтобы не образовывались обрывы горизонта при повороте
     p.drawLine(widgetLeft * 2, pitchOffset, widgetRight * 2, pitchOffset);
+
+    // Лестница тангажа: линии каждые 10° с разрывом в центре, подписи у ±20°
+    p.setFont(Theme::fixedFont(7));
+    for (int deg = -20; deg <= 20; deg += 10) {
+        if (deg == 0)
+            continue;
+        const int y = pitchOffset - deg * 2;
+        const int halfWidth = (deg % 20 == 0) ? 28 : 16;
+        p.setPen(QPen(Theme::textPrimary, 1));
+        p.drawLine(-halfWidth, y, -6, y);
+        p.drawLine(6, y, halfWidth, y);
+        if (deg % 20 == 0) {
+            p.setPen(Theme::textDim);
+            p.drawText(QRect(-halfWidth - 18, y - 7, 16, 14), Qt::AlignRight | Qt::AlignVCenter, QString::number(std::abs(deg)));
+            p.drawText(QRect(halfWidth + 2, y - 7, 16, 14), Qt::AlignLeft | Qt::AlignVCenter, QString::number(std::abs(deg)));
+        }
+    }
 
     p.restore();
 
@@ -414,6 +496,8 @@ void CompassWidget::setYaw(float yaw)
 
 void CompassWidget::drawGauge(QPainter &p)
 {
+    // Демпфированное значение с переходом через 360°
+    m_yawShown = stepTowardsAngle(m_yawShown, m_yaw, 0.15f);
     // Изображение подложки циферблата
     p.setPen(QPen(Theme::outline, 2));
     p.setBrush(Theme::gaugeFace);
@@ -452,11 +536,14 @@ void CompassWidget::drawGauge(QPainter &p)
         }
     }
 
-    float needleRad = (m_yaw - 90.0f) * PI / 180.0f;
+    float needleRad = (m_yawShown - 90.0f) * PI / 180.0f;
     p.setPen(QPen(Theme::needle, 3));
     p.drawLine(0, 0, static_cast<int>(70 * std::cos(needleRad)), static_cast<int>(70 * std::sin(needleRad)));
 
     p.setPen(Theme::textPrimary);
     p.setFont(Theme::fixedFont(9, true));
-    p.drawText(-15, 10, QString::number(static_cast<int>(m_yaw)) + QChar(0xB0));
+    int yawNorm = static_cast<int>(std::fmod(m_yawShown, 360.0f));
+    if (yawNorm < 0)
+        yawNorm += 360;
+    p.drawText(-15, 10, QString::number(yawNorm) + QChar(0xB0));
 }

@@ -2,6 +2,7 @@
 #define MAINWINDOW_H
 
 #include "TelemetryPacket.h"
+#include <QElapsedTimer>
 #include <QLabel>
 #include <QProgressBar>
 #include <QTimer>
@@ -31,7 +32,11 @@ private:
     void updateStatusLabel();
 
 private:
-    enum class LinkState { NoData, Live, Lost };
+    enum class LinkState {
+        NoData,
+        Live,
+        Lost
+    };
     LinkState m_linkState = LinkState::NoData;
     qint64 m_lastPacketMs = 0;
 
@@ -76,10 +81,19 @@ protected:
 
     void paintEvent(QPaintEvent *event) override;
 
+    // Демпфирование стрелки: экспоненциальное приближение current к target, tau в секундах.
+    // Вызывать внутри drawGauge(); планирует следующий кадр, пока значение не сошлось.
+    float stepTowards(float current, float target, float tau);
+    // Вариант для углов с переходом через 360 (курс)
+    float stepTowardsAngle(float current, float target, float tau);
+
     virtual void drawGauge(QPainter &p) = 0;
 
 private:
     bool m_stale = false;
+    float m_dt = 0.0f;
+    bool m_animating = false;
+    QElapsedTimer m_frameTimer;
 };
 
 // ---------- Altimeter ----------
@@ -95,6 +109,7 @@ protected:
 
 private:
     float m_altitude = 0.0f;
+    float m_altitudeShown = 0.0f;
 };
 
 // ---------- Speedometer ----------
@@ -110,6 +125,7 @@ protected:
 
 private:
     float m_speed = 0.0f;
+    float m_speedShown = 0.0f;
 };
 
 // ---------- Attitude (pitch/roll) ----------
@@ -126,6 +142,8 @@ protected:
 private:
     float m_pitch = 0.0f;
     float m_roll = 0.0f;
+    float m_pitchShown = 0.0f;
+    float m_rollShown = 0.0f;
 };
 
 // ---------- Compass (yaw) ----------
@@ -141,6 +159,7 @@ protected:
 
 private:
     float m_yaw = 0.0f;
+    float m_yawShown = 0.0f;
 };
 
 #endif
