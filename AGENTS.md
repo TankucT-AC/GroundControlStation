@@ -2,6 +2,8 @@
 
 C++17 / Qt6 UAV telemetry: `sender` (console UDP generator) → 46-byte binary packets → `receiver` (Qt Widgets gauge dashboard). `common` is a static lib holding the wire protocol. No CI — verification is local build + ctest.
 
+Learning material: `TUTORIAL.md` (step-by-step custom gauge widget) and `STYLEGUIDE.md` (architecture, conventions, and process used in this repo).
+
 ## Build & test
 
 ```sh
